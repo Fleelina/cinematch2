@@ -1,0 +1,15 @@
+{
+  "name": "cinematch-backend",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.6.0",
+    "@vitalets/google-translate-api": "^9.2.1",
+    "axios": "^1.14.0",
+    "better-sqlite3": "^12.8.0"
+  }
+}

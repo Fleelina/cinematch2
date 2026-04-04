@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  username    String?  @unique
+  email       String   @unique
+  password    String
+  bio         String?
+  avatar      String?  // URL - ya karakter foto ya galeri foto
+  avatarType  String?  // "character" | "photo" | null
+  age         Int?
+  showAge     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  movies            UserMovie[]
+  sentInteractions  Interaction[] @relation("SentInteractions")
+  recvInteractions  Interaction[] @relation("ReceivedInteractions")
+  matchesAsUser1    Match[]       @relation("MatchUser1")
+  matchesAsUser2    Match[]       @relation("MatchUser2")
+  ratings           MovieRating[]
+  sentMessages      Message[]
+  watchlist         Watchlist[]
+}
+
+model Movie {
+  id      String  @id @default(cuid())
+  tmdbId  Int     @unique
+  title   String
+  poster  String?
+  year    Int?
+
+  users   UserMovie[]
+  ratings MovieRating[]
+}
+
+model UserMovie {
+  userId  String
+  movieId String
+
+  user  User  @relation(fields: [userId], references: [id])
+  movie Movie @relation(fields: [movieId], references: [id])
+
+  @@unique([userId, movieId])
+}
+
+model MovieRating {
+  id        String   @id @default(cuid())
+  userId    String
+  movieId   String
+  rating    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id])
+  movie Movie @relation(fields: [movieId], references: [id])
+
+  @@unique([userId, movieId])
+}
+
+model Watchlist {
+  id      String   @id @default(cuid())
+  userId  String
+  tmdbId  Int
+  title   String
+  poster  String?
+  year    Int?
+  addedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, tmdbId])
+}
+
+model Interaction {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  type       String
+  createdAt  DateTime @default(now())
+
+  fromUser User @relation("SentInteractions", fields: [fromUserId], references: [id])
+  toUser   User @relation("ReceivedInteractions", fields: [toUserId], references: [id])
+
+  @@unique([fromUserId, toUserId])
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime @default(now())
+
+  user1    User      @relation("MatchUser1", fields: [user1Id], references: [id])
+  user2    User      @relation("MatchUser2", fields: [user2Id], references: [id])
+  messages Message[]
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  matchId    String
+  senderId   String
+  text       String
+  createdAt  DateTime @default(now())
+  readAt     DateTime?
+
+  match  Match @relation(fields: [matchId], references: [id])
+  sender User  @relation(fields: [senderId], references: [id])
+}
