@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, Image, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator, FlatList, Switch
@@ -18,12 +18,20 @@ export default function EditProfileScreen({ navigation }) {
   const [avatar, setAvatar] = useState(user?.avatar || null);
   const [avatarType, setAvatarType] = useState(user?.avatarType || null);
 
-  const [tab, setTab] = useState('info'); // 'info' | 'avatar'
-  const [avatarTab, setAvatarTab] = useState('character'); // 'character' | 'photo'
+  const [tab, setTab] = useState('info');
+  const [avatarTab, setAvatarTab] = useState('character');
   const [charQuery, setCharQuery] = useState('');
   const [charResults, setCharResults] = useState([]);
   const [charSearching, setCharSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainTabs');
+    }
+  };
 
   const searchCharacters = async () => {
     if (!charQuery.trim()) return;
@@ -31,7 +39,7 @@ export default function EditProfileScreen({ navigation }) {
     try {
       const res = await api.get(`/users/characters/search?query=${charQuery}`);
       setCharResults(res.data);
-    } catch (err) {
+    } catch {
       Alert.alert('Hata', 'Arama basarisiz');
     } finally {
       setCharSearching(false);
@@ -40,44 +48,25 @@ export default function EditProfileScreen({ navigation }) {
 
   const pickFromGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Izin gerekli', 'Galeri erisimi icin izin ver');
-      return;
-    }
+    if (status !== 'granted') { Alert.alert('İzin gerekli', 'Galeri erişimi için izin ver'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.6,
-      base64: true,
+      allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true,
     });
-    if (!result.canceled && result.assets[0]) {
-      await uploadToR2(result.assets[0]);
-    }
+    if (!result.canceled && result.assets[0]) await uploadAvatar(result.assets[0]);
   };
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Izin gerekli', 'Kamera erisimi icin izin ver');
-      return;
-    }
+    if (status !== 'granted') { Alert.alert('İzin gerekli', 'Kamera erişimi için izin ver'); return; }
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.6,
-      base64: true,
+      allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true,
     });
-    if (!result.canceled && result.assets[0]) {
-      await uploadToR2(result.assets[0]);
-    }
+    if (!result.canceled && result.assets[0]) await uploadAvatar(result.assets[0]);
   };
 
-  const uploadToR2 = async (asset) => {
-    if (!asset.base64) {
-      Alert.alert('Hata', 'Gorsel yuklenemedi');
-      return;
-    }
+  const uploadAvatar = async (asset) => {
+    if (!asset.base64) { Alert.alert('Hata', 'Görsel yüklenemedi'); return; }
     setSaving(true);
     try {
       const mimeType = asset.mimeType || 'image/jpeg';
@@ -87,8 +76,8 @@ export default function EditProfileScreen({ navigation }) {
       });
       setAvatar(res.data.url);
       setAvatarType('photo');
-    } catch (err) {
-      Alert.alert('Hata', 'Gorsel yuklenemedi. Tekrar dene.');
+    } catch {
+      Alert.alert('Hata', 'Görsel yüklenemedi. Tekrar dene.');
     } finally {
       setSaving(false);
     }
@@ -99,46 +88,36 @@ export default function EditProfileScreen({ navigation }) {
     setAvatarType('character');
     setCharResults([]);
     setCharQuery('');
-    Alert.alert('Secildi!', `${person.name} avatarin olarak ayarlandi.`);
+    Alert.alert('Seçildi!', `${person.name} avatarın olarak ayarlandı.`);
   };
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert('Hata', 'Ad bos birakilamaz');
-      return;
-    }
+    if (!name.trim()) { Alert.alert('Hata', 'Ad boş bırakılamaz'); return; }
     if (age && (isNaN(parseInt(age)) || parseInt(age) < 13 || parseInt(age) > 120)) {
-      Alert.alert('Hata', 'Gecerli bir yas gir (13-120)');
-      return;
+      Alert.alert('Hata', 'Geçerli bir yaş gir (13-120)'); return;
     }
-
     setSaving(true);
     try {
       const res = await api.put('/users/profile', {
         name: name.trim(),
         username: username.trim() || null,
         bio: bio.trim() || null,
-        avatar,
-        avatarType,
+        avatar, avatarType,
         age: age ? parseInt(age) : null,
         showAge,
       });
-
-      // Context'i guncelle
       setUser((prev) => ({ ...prev, ...res.data }));
-      Alert.alert('Kaydedildi!', 'Profilin guncellendi.');
-      navigation.goBack();
+      Alert.alert('Kaydedildi!', 'Profil güncellendi.');
+      handleBack();
     } catch (err) {
-      Alert.alert('Hata', err.response?.data?.error || 'Kaydetme basarisiz');
+      Alert.alert('Hata', err.response?.data?.error || 'Kaydetme başarısız');
     } finally {
       setSaving(false);
     }
   };
 
   const renderAvatar = () => {
-    if (avatar) {
-      return <Image source={{ uri: avatar }} style={styles.avatarPreview} />;
-    }
+    if (avatar) return <Image source={{ uri: avatar }} style={styles.avatarPreview} />;
     return (
       <View style={styles.avatarPlaceholder}>
         <Text style={styles.avatarPlaceholderText}>{name?.[0]?.toUpperCase() || '?'}</Text>
@@ -148,12 +127,11 @@ export default function EditProfileScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={handleBack}>
           <Text style={styles.backBtn}>← Geri</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profili Duzenle</Text>
+        <Text style={styles.headerTitle}>Profili Düzenle</Text>
         <TouchableOpacity onPress={handleSave} disabled={saving}>
           {saving
             ? <ActivityIndicator color="#E50914" size="small" />
@@ -162,43 +140,30 @@ export default function EditProfileScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'info' && styles.tabActive]}
-          onPress={() => setTab('info')}
-        >
-          <Text style={[styles.tabText, tab === 'info' && styles.tabTextActive]}>Bilgiler</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'avatar' && styles.tabActive]}
-          onPress={() => setTab('avatar')}
-        >
-          <Text style={[styles.tabText, tab === 'avatar' && styles.tabTextActive]}>Avatar</Text>
-        </TouchableOpacity>
+        {['info', 'avatar'].map((t) => (
+          <TouchableOpacity key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => setTab(t)}>
+            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+              {t === 'info' ? 'Bilgiler' : 'Avatar'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {tab === 'info' ? (
           <View style={styles.section}>
-            {/* Avatar preview */}
             <View style={styles.avatarCenter}>
               {renderAvatar()}
               <TouchableOpacity onPress={() => setTab('avatar')}>
-                <Text style={styles.changeAvatarText}>Avatari Degistir</Text>
+                <Text style={styles.changeAvatarText}>Avatarı Değiştir</Text>
               </TouchableOpacity>
             </View>
 
             <Text style={styles.label}>Ad Soyad</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Adiniz"
-              placeholderTextColor="#555"
-            />
+            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Adınız" placeholderTextColor="#555" />
 
-            <Text style={styles.label}>Kullanici Adi</Text>
+            <Text style={styles.label}>Kullanıcı Adı</Text>
             <View style={styles.usernameRow}>
               <Text style={styles.at}>@</Text>
               <TextInput
@@ -210,105 +175,68 @@ export default function EditProfileScreen({ navigation }) {
                 autoCapitalize="none"
               />
             </View>
-            <Text style={styles.hint}>Sadece harf, rakam, nokta ve alt cizgi</Text>
+            <Text style={styles.hint}>Sadece harf, rakam, nokta ve alt çizgi</Text>
 
-            <Text style={styles.label}>Hakkimda</Text>
+            <Text style={styles.label}>Hakkımda</Text>
             <TextInput
               style={[styles.input, styles.bioInput]}
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Kendinden bahset..."
-              placeholderTextColor="#555"
-              multiline
+              value={bio} onChangeText={setBio}
+              placeholder="Kendinden bahset..." placeholderTextColor="#555" multiline
             />
 
-            <Text style={styles.label}>Yas</Text>
+            <Text style={styles.label}>Yaş</Text>
             <TextInput
-              style={styles.input}
-              value={age}
-              onChangeText={setAge}
-              placeholder="Yasinizi girin"
-              placeholderTextColor="#555"
-              keyboardType="numeric"
-              maxLength={3}
+              style={styles.input} value={age} onChangeText={setAge}
+              placeholder="Yaşınızı girin" placeholderTextColor="#555"
+              keyboardType="numeric" maxLength={3}
             />
 
             <View style={styles.switchRow}>
               <View>
-                <Text style={styles.switchLabel}>Yasi profilimde goster</Text>
-                <Text style={styles.switchSubLabel}>Kapali ise yasiniz kimseye gozukmez</Text>
+                <Text style={styles.switchLabel}>Yaşı profilimde göster</Text>
+                <Text style={styles.switchSubLabel}>Kapalı ise yaşınız kimseye görünmez</Text>
               </View>
-              <Switch
-                value={showAge}
-                onValueChange={setShowAge}
-                trackColor={{ false: '#333', true: '#E50914' }}
-                thumbColor="#fff"
-              />
+              <Switch value={showAge} onValueChange={setShowAge} trackColor={{ false: '#333', true: '#E50914' }} thumbColor="#fff" />
             </View>
           </View>
         ) : (
           <View style={styles.section}>
-            {/* Avatar preview */}
-            <View style={styles.avatarCenter}>
-              {renderAvatar()}
-            </View>
+            <View style={styles.avatarCenter}>{renderAvatar()}</View>
 
-            {/* Avatar tab seçimi */}
             <View style={styles.avatarTabs}>
-              <TouchableOpacity
-                style={[styles.avatarTab, avatarTab === 'character' && styles.avatarTabActive]}
-                onPress={() => setAvatarTab('character')}
-              >
-                <Text style={[styles.avatarTabText, avatarTab === 'character' && styles.avatarTabTextActive]}>
-                  🎭 Karakter
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.avatarTab, avatarTab === 'photo' && styles.avatarTabActive]}
-                onPress={() => setAvatarTab('photo')}
-              >
-                <Text style={[styles.avatarTabText, avatarTab === 'photo' && styles.avatarTabTextActive]}>
-                  📷 Fotograf
-                </Text>
-              </TouchableOpacity>
+              {['character', 'photo'].map((t) => (
+                <TouchableOpacity key={t} style={[styles.avatarTab, avatarTab === t && styles.avatarTabActive]} onPress={() => setAvatarTab(t)}>
+                  <Text style={[styles.avatarTabText, avatarTab === t && styles.avatarTabTextActive]}>
+                    {t === 'character' ? '🎭 Karakter' : '📷 Fotoğraf'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             {avatarTab === 'character' ? (
               <View>
-                <Text style={styles.avatarInfo}>
-                  Film ve dizi karakterlerini veya oyuncularini ara, avatar olarak sec!
-                </Text>
+                <Text style={styles.avatarInfo}>Film ve dizi karakterlerini ara, avatar olarak seç!</Text>
                 <View style={styles.searchRow}>
                   <TextInput
                     style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                    value={charQuery}
-                    onChangeText={setCharQuery}
-                    placeholder="Jon Snow, Tony Stark..."
-                    placeholderTextColor="#555"
-                    onSubmitEditing={searchCharacters}
-                    returnKeyType="search"
+                    value={charQuery} onChangeText={setCharQuery}
+                    placeholder="Jon Snow, Tony Stark..." placeholderTextColor="#555"
+                    onSubmitEditing={searchCharacters} returnKeyType="search"
                   />
                   <TouchableOpacity style={styles.searchBtn} onPress={searchCharacters}>
                     <Text style={styles.searchBtnText}>Ara</Text>
                   </TouchableOpacity>
                 </View>
-
                 {charSearching && <ActivityIndicator color="#E50914" style={{ marginTop: 12 }} />}
-
                 {charResults.length > 0 && (
                   <FlatList
-                    data={charResults}
-                    keyExtractor={(item) => item.id.toString()}
-                    numColumns={3}
-                    scrollEnabled={false}
-                    style={{ marginTop: 12 }}
+                    data={charResults} keyExtractor={(item) => item.id.toString()}
+                    numColumns={3} scrollEnabled={false} style={{ marginTop: 12 }}
                     renderItem={({ item }) => (
                       <TouchableOpacity style={styles.charCard} onPress={() => selectCharacter(item)}>
                         <Image source={{ uri: item.photo }} style={styles.charPhoto} />
                         <Text style={styles.charName} numberOfLines={2}>{item.name}</Text>
-                        {item.knownFor ? (
-                          <Text style={styles.charKnownFor} numberOfLines={1}>{item.knownFor}</Text>
-                        ) : null}
+                        {item.knownFor && <Text style={styles.charKnownFor} numberOfLines={1}>{item.knownFor}</Text>}
                       </TouchableOpacity>
                     )}
                   />
@@ -318,21 +246,18 @@ export default function EditProfileScreen({ navigation }) {
               <View style={styles.photoOptions}>
                 <TouchableOpacity style={styles.photoBtn} onPress={pickFromGallery}>
                   <Text style={styles.photoBtnIcon}>🖼</Text>
-                  <Text style={styles.photoBtnText}>Galeriden Sec</Text>
+                  <Text style={styles.photoBtnText}>Galeriden Seç</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.photoBtn} onPress={takePhoto}>
                   <Text style={styles.photoBtnIcon}>📷</Text>
-                  <Text style={styles.photoBtnText}>Fotograf Cek</Text>
+                  <Text style={styles.photoBtnText}>Fotoğraf Çek</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             {avatar && (
-              <TouchableOpacity
-                style={styles.removeAvatarBtn}
-                onPress={() => { setAvatar(null); setAvatarType(null); }}
-              >
-                <Text style={styles.removeAvatarText}>Avatari Kaldir</Text>
+              <TouchableOpacity style={styles.removeAvatarBtn} onPress={() => { setAvatar(null); setAvatarType(null); }}>
+                <Text style={styles.removeAvatarText}>Avatarı Kaldır</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -345,82 +270,47 @@ export default function EditProfileScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f0f0f', paddingTop: 52 },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 16, marginBottom: 12,
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 },
   backBtn: { color: '#E50914', fontSize: 15, fontWeight: '600' },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
   saveBtn: { color: '#E50914', fontSize: 15, fontWeight: 'bold' },
-
   tabs: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 16, backgroundColor: '#1c1c1c', borderRadius: 12, padding: 4 },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   tabActive: { backgroundColor: '#E50914' },
   tabText: { color: '#888', fontWeight: '600' },
   tabTextActive: { color: '#fff' },
-
   section: { paddingHorizontal: 16 },
-
   avatarCenter: { alignItems: 'center', marginBottom: 24 },
   avatarPreview: { width: 100, height: 100, borderRadius: 50, marginBottom: 8 },
-  avatarPlaceholder: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: '#E50914', justifyContent: 'center', alignItems: 'center', marginBottom: 8,
-  },
+  avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#E50914', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   avatarPlaceholderText: { color: '#fff', fontSize: 44, fontWeight: 'bold' },
   changeAvatarText: { color: '#E50914', fontSize: 14, fontWeight: '600' },
-
   label: { color: '#aaa', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 6, marginTop: 16 },
-  input: {
-    backgroundColor: '#1c1c1c', color: '#fff', borderRadius: 12,
-    padding: 14, fontSize: 15, borderWidth: 1, borderColor: '#333', marginBottom: 4,
-  },
+  input: { backgroundColor: '#1c1c1c', color: '#fff', borderRadius: 12, padding: 14, fontSize: 15, borderWidth: 1, borderColor: '#333', marginBottom: 4 },
   bioInput: { height: 90, textAlignVertical: 'top' },
   hint: { color: '#555', fontSize: 11, marginBottom: 4 },
-
   usernameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   at: { color: '#888', fontSize: 18, fontWeight: 'bold' },
-
-  switchRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginTop: 20,
-    backgroundColor: '#1c1c1c', borderRadius: 12,
-    padding: 14, borderWidth: 1, borderColor: '#333',
-  },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, backgroundColor: '#1c1c1c', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#333' },
   switchLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
   switchSubLabel: { color: '#555', fontSize: 12, marginTop: 2 },
-
-  avatarTabs: {
-    flexDirection: 'row', backgroundColor: '#1c1c1c',
-    borderRadius: 12, padding: 4, marginBottom: 16,
-  },
+  avatarTabs: { flexDirection: 'row', backgroundColor: '#1c1c1c', borderRadius: 12, padding: 4, marginBottom: 16 },
   avatarTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   avatarTabActive: { backgroundColor: '#2a2a2a' },
   avatarTabText: { color: '#888', fontWeight: '600' },
   avatarTabTextActive: { color: '#fff' },
-
   avatarInfo: { color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 12 },
-
   searchRow: { flexDirection: 'row', gap: 8 },
   searchBtn: { backgroundColor: '#E50914', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center' },
   searchBtnText: { color: '#fff', fontWeight: 'bold' },
-
   charCard: { flex: 1, margin: 4, alignItems: 'center' },
   charPhoto: { width: '100%', aspectRatio: 1, borderRadius: 12, marginBottom: 4 },
   charName: { color: '#fff', fontSize: 11, textAlign: 'center', fontWeight: '600' },
   charKnownFor: { color: '#888', fontSize: 10, textAlign: 'center' },
-
   photoOptions: { flexDirection: 'row', gap: 12, marginTop: 8 },
-  photoBtn: {
-    flex: 1, backgroundColor: '#1c1c1c', borderRadius: 16,
-    padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#333',
-  },
+  photoBtn: { flex: 1, backgroundColor: '#1c1c1c', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   photoBtnIcon: { fontSize: 36, marginBottom: 8 },
   photoBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-
-  removeAvatarBtn: {
-    marginTop: 16, padding: 12, alignItems: 'center',
-    borderWidth: 1, borderColor: '#333', borderRadius: 12,
-  },
+  removeAvatarBtn: { marginTop: 16, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#333', borderRadius: 12 },
   removeAvatarText: { color: '#888', fontSize: 14 },
 });

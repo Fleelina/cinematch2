@@ -11,7 +11,7 @@ Film zevkine göre arkadaş bulan mobil uygulama.
 - 💬 Gerçek zamanlı mesajlaşma (Socket.io)
 - 📋 Sonra izle listesi
 - 🎭 Karakter/oyuncu avatarı (TMDB)
-- 🖼 Profil fotoğrafı (AWS S3)
+- 🖼 Profil fotoğrafı (Cloudflare R2)
 - ⭐ CineMatch puan sistemi
 
 ---
@@ -24,8 +24,8 @@ Film zevkine göre arkadaş bulan mobil uygulama.
 | Backend | Node.js + Express |
 | Realtime | Socket.io |
 | Veritabanı | PostgreSQL + Prisma ORM |
-| Depolama | AWS S3 (avatar/fotoğraf) |
-| Auth | JWT |
+| Depolama | Cloudflare R2 (avatar/fotoğraf) |
+| Auth | JWT (bcrypt ile hash) |
 | Film API | TMDB |
 
 ---
@@ -34,9 +34,9 @@ Film zevkine göre arkadaş bulan mobil uygulama.
 
 ### Gereksinimler
 - Node.js 18+
-- PostgreSQL veritabanı (veya Supabase)
+- PostgreSQL veritabanı (Supabase önerilir)
 - TMDB API Key → [themoviedb.org](https://www.themoviedb.org/settings/api)
-- AWS S3 bucket (avatar yüklemek için)
+- Cloudflare R2 bucket (avatar yüklemek için)
 - Expo Go (telefon)
 
 ---
@@ -59,16 +59,24 @@ npm install
 `backend/` klasöründe `.env` dosyası oluştur:
 ```env
 DATABASE_URL="postgresql://kullanici:sifre@host:5432/cinematch"
-JWT_SECRET="gizli_bir_anahtar_yaz"
+DIRECT_URL="postgresql://kullanici:sifre@host:5432/cinematch"
+JWT_SECRET="buraya_guclu_bir_secret_yaz"
 TMDB_API_KEY="tmdb_api_keyin"
 PORT=3000
+NODE_ENV=development
 
-# AWS S3
-AWS_ACCESS_KEY_ID="aws_access_key"
-AWS_SECRET_ACCESS_KEY="aws_secret_key"
-AWS_REGION="eu-central-1"
-AWS_BUCKET_NAME="cinematch-avatars"
+# Cloudflare R2
+R2_ACCOUNT_ID="r2_account_id"
+R2_ACCESS_KEY_ID="r2_access_key"
+R2_SECRET_ACCESS_KEY="r2_secret_key"
+R2_BUCKET_NAME="bucket_adi"
+R2_PUBLIC_URL="https://pub-xxx.r2.dev"
 ```
+
+> JWT_SECRET için güçlü bir değer üretmek için şunu çalıştır:
+> ```bash
+> node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+> ```
 
 Veritabanını oluştur:
 ```bash
@@ -90,17 +98,7 @@ cd mobile
 npm install
 ```
 
-`mobile/src/services/api.js` dosyasında API_URL'yi güncelle:
-```js
-const API_URL = 'http://SENIN_IP_ADRESIN:3000/api';
-```
-
-`mobile/src/services/socket.js` dosyasında SOCKET_URL'yi güncelle:
-```js
-const SOCKET_URL = 'http://SENIN_IP_ADRESIN:3000';
-```
-
-> ngrok kullanıyorsan her ikisini de ngrok URL'inle güncelle.
+`mobile/src/services/api.js` ve `mobile/src/services/socket.js` dosyalarındaki URL'leri kendi backend adresinle güncelle.
 
 Expo'yu başlat:
 ```bash
@@ -125,8 +123,9 @@ Telefonda Expo Go uygulamasını aç ve QR kodu tara.
 
 ---
 
-## Notlar
+## Güvenlik Notları
 
-- Avatar fotoğrafları AWS S3'te saklanır, veritabanında sadece URL tutulur
-- TMDB karakter/oyuncu fotoğrafları doğrudan URL olarak saklanır
-- Mesajlaşma HTTP polling değil Socket.io ile gerçek zamanlı çalışır
+- `.env` dosyası asla git'e eklenmez
+- JWT secret en az 48 byte kriptografik rastgele değer olmalı
+- Avatar fotoğrafları Cloudflare R2'de saklanır, veritabanında sadece URL tutulur
+- Şifreler native bcrypt ile hash'lenir (salt rounds: 12)

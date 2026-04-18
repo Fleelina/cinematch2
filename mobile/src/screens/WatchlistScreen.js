@@ -24,6 +24,14 @@ export default function WatchlistScreen({ navigation }) {
 
   useEffect(() => { fetchWatchlist(); }, []);
 
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Swipe');
+    }
+  };
+
   const handleRemove = async (tmdbId) => {
     try {
       await api.delete(`/movies/watchlist/${tmdbId}`);
@@ -56,9 +64,8 @@ export default function WatchlistScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>←</Text>
         </TouchableOpacity>
         <View>
@@ -142,8 +149,6 @@ function WatchlistCard({ item, onDetail, onMove, onRemove }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, backgroundColor: Colors.bg, justifyContent: 'center', alignItems: 'center' },
-
-  // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 52, paddingBottom: 14,
@@ -156,8 +161,6 @@ const styles = StyleSheet.create({
   backBtnText: { fontSize: 18, color: Colors.textPrimary, lineHeight: 20 },
   headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4, color: Colors.textPrimary, textAlign: 'center' },
   headerSub: { fontSize: 11, color: Colors.textMuted, textAlign: 'center', marginTop: 2 },
-
-  // Kart
   card: {
     flexDirection: 'row',
     backgroundColor: Colors.bgCard,
@@ -173,16 +176,10 @@ const styles = StyleSheet.create({
   movieTitle: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4, lineHeight: 19 },
   movieYear: { fontSize: 12, color: Colors.textSecondary, marginBottom: 6 },
   addedAt: { fontSize: 10, color: Colors.textMuted },
-
-  // Aksiyon kolonuu
-  cardActions: {
-    justifyContent: 'space-between', alignItems: 'flex-end',
-    padding: 10,
-  },
+  cardActions: { justifyContent: 'space-between', alignItems: 'flex-end', padding: 10 },
   moveBtn: {
     backgroundColor: Colors.red, borderRadius: Radii.sm,
     paddingHorizontal: 10, paddingVertical: 7,
-    ...Shadows.red,
   },
   moveBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   removeBtn: {
@@ -191,18 +188,13 @@ const styles = StyleSheet.create({
     borderWidth: 0.5, borderColor: Colors.border,
   },
   removeBtnText: { fontSize: 12, color: Colors.textSecondary },
-
-  // Boş durum
-  emptyWrap: {
-    flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32,
-  },
+  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyEmoji: { fontSize: 52, marginBottom: 16 },
   emptyTitle: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', marginBottom: 8 },
   emptySub: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19, marginBottom: 28 },
   goSwipeBtn: {
     backgroundColor: Colors.red, borderRadius: Radii.md,
     paddingVertical: 14, paddingHorizontal: 32,
-    ...Shadows.red,
   },
   goSwipeBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });
