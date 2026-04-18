@@ -1,86 +1,226 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  Animated, Pressable,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { Colors, Radii, Shadows } from '../theme';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const { login } = useAuth();
+
+  const btnScale = useRef(new Animated.Value(1)).current;
+
+  const animatePress = (toValue) =>
+    Animated.spring(btnScale, { toValue, useNativeDriver: true, speed: 40 }).start();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Hata', 'Email ve şifre zorunludur');
+      Alert.alert('Eksik bilgi', 'E-posta ve şifre zorunludur.');
       return;
     }
     setLoading(true);
     try {
       await login(email, password);
     } catch (err) {
-      const status = err.response?.status;
       const msg = err.response?.data?.error;
-      const network = err.message;
-      Alert.alert(
-        'Giriş Hatası',
-        msg
-          ? `Sunucu: ${msg} (${status})`
-          : `Ağ hatası: ${network}\n\nAPI: ${err.config?.baseURL || '?'}`
-      );
+      Alert.alert('Giriş hatası', msg || 'E-posta veya şifre hatalı.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <Text style={styles.logo}>🎬 CineMatch</Text>
-      <Text style={styles.subtitle}>Film zevkine göre arkadaş bul</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      {/* Arka plan süslemesi */}
+      <View style={styles.bgAccent} pointerEvents="none" />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#888"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Şifre"
-        placeholderTextColor="#888"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+      {/* Logo alanı */}
+      <View style={styles.logoArea}>
+        <Text style={styles.logoEyebrow}>CineMatch</Text>
+        <Text style={styles.logoTitle}>Film zevkine{'\n'}göre bağlan.</Text>
+        <Text style={styles.logoSub}>Ortak filmler · Gerçek bağlantılar</Text>
+      </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Giriş Yap</Text>}
-      </TouchableOpacity>
+      {/* Form */}
+      <View style={styles.form}>
+        <InputField
+          label="E-posta"
+          placeholder="kullanici@email.com"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          focused={focusedField === 'email'}
+          onFocus={() => setFocusedField('email')}
+          onBlur={() => setFocusedField(null)}
+        />
+        <InputField
+          label="Şifre"
+          placeholder="En az 6 karakter"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          focused={focusedField === 'password'}
+          onFocus={() => setFocusedField('password')}
+          onBlur={() => setFocusedField(null)}
+        />
 
+        <Animated.View style={{ transform: [{ scale: btnScale }], marginTop: 8 }}>
+          <Pressable
+            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
+            onPress={handleLogin}
+            onPressIn={() => animatePress(0.97)}
+            onPressOut={() => animatePress(1)}
+            disabled={loading}
+          >
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.primaryBtnText}>Giriş Yap</Text>
+            }
+          </Pressable>
+        </Animated.View>
+      </View>
+
+      {/* Divider */}
+      <View style={styles.dividerRow}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>veya</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      {/* Kayıt link */}
       <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-        <Text style={styles.link}>Hesabın yok mu? <Text style={styles.linkBold}>Kayıt ol</Text></Text>
+        <Text style={styles.registerLink}>
+          Hesabın yok mu?{' '}
+          <Text style={styles.registerLinkBold}>Kayıt ol</Text>
+        </Text>
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );
 }
 
+function InputField({ label, focused, ...props }) {
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TextInput
+        style={[styles.input, focused && styles.inputFocused]}
+        placeholderTextColor={Colors.textMuted}
+        {...props}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', padding: 24 },
-  logo: { fontSize: 36, fontWeight: 'bold', color: '#E50914', textAlign: 'center', marginBottom: 8 },
-  subtitle: { color: '#888', textAlign: 'center', marginBottom: 40, fontSize: 15 },
+  container: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  bgAccent: {
+    position: 'absolute',
+    top: -80,
+    right: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: Colors.redGlow,
+    opacity: 0.5,
+  },
+
+  // Logo
+  logoArea: { marginBottom: 40 },
+  logoEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 5,
+    color: Colors.red,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  logoTitle: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    letterSpacing: -1,
+    lineHeight: 40,
+    marginBottom: 10,
+  },
+  logoSub: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    letterSpacing: 0.5,
+  },
+
+  // Form
+  form: { gap: 0 },
+  inputGroup: { marginBottom: 16 },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: Colors.textMuted,
+    marginBottom: 7,
+  },
   input: {
-    backgroundColor: '#1c1c1c', color: '#fff', borderRadius: 12,
-    padding: 14, marginBottom: 14, fontSize: 15, borderWidth: 1, borderColor: '#333'
+    backgroundColor: Colors.bgInput,
+    color: Colors.textPrimary,
+    borderRadius: Radii.md,
+    padding: 16,
+    fontSize: 15,
+    borderWidth: 0.5,
+    borderColor: Colors.border,
   },
-  button: {
-    backgroundColor: '#E50914', borderRadius: 12, padding: 16,
-    alignItems: 'center', marginTop: 8
+  inputFocused: {
+    borderColor: Colors.red,
+    backgroundColor: Colors.redDim,
   },
-  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  link: { color: '#888', textAlign: 'center', marginTop: 20 },
-  linkBold: { color: '#E50914', fontWeight: 'bold' },
+
+  // Buton
+  primaryBtn: {
+    backgroundColor: Colors.red,
+    borderRadius: Radii.md,
+    padding: 17,
+    alignItems: 'center',
+    ...Shadows.red,
+  },
+  primaryBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
+
+  // Divider
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 24,
+  },
+  dividerLine: { flex: 1, height: 0.5, backgroundColor: Colors.border },
+  dividerText: { fontSize: 12, color: Colors.textMuted },
+
+  // Kayıt link
+  registerLink: {
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  registerLinkBold: {
+    color: Colors.red,
+    fontWeight: '700',
+  },
 });

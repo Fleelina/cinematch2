@@ -5,9 +5,17 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { Colors, Radii } from '../theme';
 
 const { width: SW } = Dimensions.get('window');
 const DRAWER_W = SW * 0.72;
+
+const MENU_ITEMS = [
+  { screen: 'MyProfile', icon: '👤', label: 'Profilim' },
+  { screen: 'EditProfile', icon: '✏️', label: 'Profili Düzenle' },
+  { screen: 'Watchlist', icon: '📋', label: 'Sonra İzle' },
+  { screen: 'Matches', icon: '❤️', label: 'Eşleşmeler' },
+];
 
 export default function DrawerMenu({ visible, onClose }) {
   const { user, logout } = useAuth();
@@ -48,57 +56,79 @@ export default function DrawerMenu({ visible, onClose }) {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Arka plan overlay */}
+      {/* Overlay */}
       <TouchableWithoutFeedback onPress={onClose}>
         <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} />
       </TouchableWithoutFeedback>
 
       {/* Drawer */}
       <Animated.View style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}>
-        {/* Profil özeti */}
-        <View style={styles.profileSection}>
-          {user?.avatar
-            ? <Image source={{ uri: user.avatar }} style={styles.avatar} />
-            : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase()}</Text>
-              </View>
-            )
-          }
-          <Text style={styles.profileName}>{user?.name}</Text>
-          {user?.username && <Text style={styles.profileUsername}>@{user.username}</Text>}
-        </View>
+        {/* Kırmızı aksanlı üst şerit */}
+        <View style={styles.drawerAccent} />
+
+        {/* Logo */}
+        <Text style={styles.drawerLogo}>CineMatch</Text>
+
+        {/* Profil bölümü */}
+        <TouchableOpacity
+          style={styles.profileSection}
+          onPress={() => navigate('MyProfile')}
+          activeOpacity={0.8}
+        >
+          <DrawerAvatar user={user} />
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{user?.name}</Text>
+            {user?.username && (
+              <Text style={styles.profileUsername}>@{user.username}</Text>
+            )}
+          </View>
+          <Text style={styles.profileChevron}>›</Text>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
         {/* Menü öğeleri */}
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigate('EditProfile')}>
-          <Text style={styles.menuIcon}>✏️</Text>
-          <Text style={styles.menuText}>Profili Düzenle</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigate('MyProfile')}>
-          <Text style={styles.menuIcon}>👤</Text>
-          <Text style={styles.menuText}>Profilim</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigate('Watchlist')}>
-          <Text style={styles.menuIcon}>📋</Text>
-          <Text style={styles.menuText}>Daha Sonra İzle</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigate('Matches')}>
-          <Text style={styles.menuIcon}>❤️</Text>
-          <Text style={styles.menuText}>Eşleşmeler</Text>
-        </TouchableOpacity>
+        <View style={styles.menuList}>
+          {MENU_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={item.screen}
+              style={styles.menuItem}
+              onPress={() => navigate(item.screen)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuIconWrap}>
+                <Text style={styles.menuIcon}>{item.icon}</Text>
+              </View>
+              <Text style={styles.menuLabel}>{item.label}</Text>
+              <Text style={styles.menuChevron}>›</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <View style={styles.divider} />
 
-        <TouchableOpacity style={[styles.menuItem, styles.menuItemLogout]} onPress={handleLogout}>
-          <Text style={styles.menuIcon}>🚪</Text>
-          <Text style={styles.menuTextLogout}>Çıkış Yap</Text>
+        {/* Çıkış */}
+        <TouchableOpacity style={styles.logoutItem} onPress={handleLogout} activeOpacity={0.7}>
+          <View style={[styles.menuIconWrap, styles.menuIconLogout]}>
+            <Text style={styles.menuIcon}>🚪</Text>
+          </View>
+          <Text style={styles.logoutLabel}>Çıkış Yap</Text>
         </TouchableOpacity>
+
+        {/* Alt versiyon notu */}
+        <Text style={styles.versionText}>CineMatch v1.0</Text>
       </Animated.View>
+    </View>
+  );
+}
+
+function DrawerAvatar({ user }) {
+  if (user?.avatar) {
+    return <Image source={{ uri: user.avatar }} style={styles.avatarImg} />;
+  }
+  return (
+    <View style={styles.avatarFallback}>
+      <Text style={styles.avatarInitial}>{user?.name?.[0]?.toUpperCase()}</Text>
     </View>
   );
 }
@@ -106,39 +136,71 @@ export default function DrawerMenu({ visible, onClose }) {
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
   drawer: {
     position: 'absolute', top: 0, left: 0, bottom: 0,
     width: DRAWER_W,
-    backgroundColor: '#111',
-    paddingTop: 60,
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 20,
+    backgroundColor: '#0d0d18',
+    borderRightWidth: 0.5, borderRightColor: Colors.border,
+    shadowColor: '#000', shadowOffset: { width: 8, height: 0 },
+    shadowOpacity: 0.6, shadowRadius: 20, elevation: 24,
   },
+  drawerAccent: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+    backgroundColor: Colors.red,
+  },
+
+  drawerLogo: {
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 4,
+    fontSize: 11, fontWeight: '700', letterSpacing: 4,
+    color: Colors.red, textTransform: 'uppercase',
+  },
+
+  // Profil bölümü
   profileSection: {
-    paddingHorizontal: 20, paddingBottom: 20, alignItems: 'flex-start', gap: 8,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 18, gap: 12,
   },
-  avatar: { width: 64, height: 64, borderRadius: 32 },
-  avatarPlaceholder: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: '#E50914', justifyContent: 'center', alignItems: 'center',
+  avatarImg: { width: 52, height: 52, borderRadius: 26 },
+  avatarFallback: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: Colors.red, justifyContent: 'center', alignItems: 'center',
   },
-  avatarText: { color: '#fff', fontSize: 28, fontWeight: '700' },
-  profileName: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 4 },
-  profileUsername: { color: '#E50914', fontSize: 13 },
+  avatarInitial: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  profileInfo: { flex: 1 },
+  profileName: { color: Colors.textPrimary, fontSize: 16, fontWeight: '700' },
+  profileUsername: { color: Colors.red, fontSize: 12, marginTop: 2, fontWeight: '500' },
+  profileChevron: { fontSize: 20, color: Colors.textMuted },
 
-  divider: { height: 1, backgroundColor: '#222', marginVertical: 8 },
+  divider: { height: 0.5, backgroundColor: Colors.border, marginHorizontal: 20, marginVertical: 4 },
 
+  // Menü
+  menuList: { paddingVertical: 4 },
   menuItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 20, paddingVertical: 15,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 13, gap: 14,
   },
-  menuIcon: { fontSize: 20, width: 26, textAlign: 'center' },
-  menuText: { color: '#ddd', fontSize: 16, fontWeight: '500' },
-  menuItemLogout: { marginTop: 4 },
-  menuTextLogout: { color: '#888', fontSize: 16, fontWeight: '500' },
+  menuIconWrap: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: Colors.bgCard, borderWidth: 0.5, borderColor: Colors.border,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  menuIconLogout: { borderColor: 'transparent', backgroundColor: 'transparent' },
+  menuIcon: { fontSize: 16 },
+  menuLabel: { flex: 1, color: '#d0d0e0', fontSize: 15, fontWeight: '500' },
+  menuChevron: { fontSize: 16, color: Colors.textHint },
+
+  // Çıkış
+  logoutItem: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 13, gap: 14,
+  },
+  logoutLabel: { color: Colors.textMuted, fontSize: 15, fontWeight: '500' },
+
+  // Versiyon
+  versionText: {
+    position: 'absolute', bottom: 24, left: 0, right: 0,
+    textAlign: 'center', fontSize: 11, color: Colors.textHint,
+  },
 });
