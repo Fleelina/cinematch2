@@ -1,5 +1,6 @@
 const prisma = require('../prisma');
 const axios = require('axios');
+const cache = require('../services/cache');
 
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
@@ -23,7 +24,6 @@ const updateProfile = async (req, res) => {
   const { name, username, bio, avatar, avatarType, age, showAge } = req.body;
 
   try {
-    // Username benzersizlik kontrolu
     if (username) {
       const existing = await prisma.user.findFirst({
         where: { username, NOT: { id: userId } },
@@ -54,18 +54,17 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// TMDB'den oyuncu/karakter ara
 const searchCharacters = async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'Arama terimi gerekli' });
 
+  const cacheKey = `characters:${query.toLowerCase().trim()}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
   try {
     const res2 = await axios.get(`${TMDB_BASE}/search/person`, {
-      params: {
-        api_key: process.env.TMDB_API_KEY,
-        query,
-        language: 'tr-TR',
-      },
+      params: { api_key: process.env.TMDB_API_KEY, query, language: 'tr-TR' },
     });
 
     const people = res2.data.results
@@ -78,6 +77,7 @@ const searchCharacters = async (req, res) => {
         knownFor: p.known_for?.map((k) => k.title || k.name).filter(Boolean).slice(0, 2).join(', '),
       }));
 
+    cache.set(cacheKey, people, 600);
     res.json(people);
   } catch (err) {
     console.error(err);
@@ -87,49 +87,59 @@ const searchCharacters = async (req, res) => {
 
 const discoverUsers = async (req, res) => {
   const userId = req.user.userId;
-  // 24 saat cooldown — dislike'lananlar 24 saat sonra tekrar görünür
   const DISLIKE_COOLDOWN_HOURS = 24;
 
   try {
-    // Sadece LIKE'lananları kalcı olarak dışla
-    const likes = await prisma.interaction.findMany({
-      where: { fromUserId: userId, type: 'LIKE' },
-      select: { toUserId: true },
-    });
-    const likedIds = likes.map((i) => i.toUserId);
-    likedIds.push(userId); // kendini gösterme
-
-    // DISLIKE'lananları cooldown süresine göre dışla
+    // Dışlanacak ID'leri tek sorguda al
     const cooldownDate = new Date(Date.now() - DISLIKE_COOLDOWN_HOURS * 60 * 60 * 1000);
-    const recentDislikes = await prisma.interaction.findMany({
-      where: {
-        fromUserId: userId,
-        type: 'DISLIKE',
-        createdAt: { gte: cooldownDate }, // sadece son 24 saattekiler
-      },
-      select: { toUserId: true },
-    });
-    const recentDislikedIds = recentDislikes.map((i) => i.toUserId);
+    const [likes, recentDislikes, myMovies] = await Promise.all([
+      prisma.interaction.findMany({
+        where: { fromUserId: userId, type: 'LIKE' },
+        select: { toUserId: true },
+      }),
+      prisma.interaction.findMany({
+        where: { fromUserId: userId, type: 'DISLIKE', createdAt: { gte: cooldownDate } },
+        select: { toUserId: true },
+      }),
+      prisma.userMovie.findMany({
+        where: { userId },
+        select: { movieId: true },
+      }),
+    ]);
 
-    const excludedIds = [...new Set([...likedIds, ...recentDislikedIds])];
+    const excludedIds = [...new Set([
+      userId,
+      ...likes.map((i) => i.toUserId),
+      ...recentDislikes.map((i) => i.toUserId),
+    ])];
 
-    const myMovies = await prisma.userMovie.findMany({
-      where: { userId },
-      select: { movieId: true },
-    });
     const myMovieIds = myMovies.map((m) => m.movieId);
+    const myMovieCount = myMovieIds.length;
 
+    // Kullanıcıları sadece gerekli alanlarla çek — movie içeriği dahil ama sadece ilk 5
     const others = await prisma.user.findMany({
       where: { id: { notIn: excludedIds } },
-      include: { movies: { include: { movie: true } } },
+      select: {
+        id: true, name: true, username: true,
+        bio: true, avatar: true, avatarType: true,
+        age: true, showAge: true,
+        movies: {
+          select: { movieId: true, movie: { select: { id: true, title: true, poster: true, tmdbId: true } } },
+          take: 20, // her kullanicidan max 20 film çek
+        },
+      },
     });
 
     const scored = others.map((user) => {
       const theirMovieIds = user.movies.map((m) => m.movieId);
       const commonCount = theirMovieIds.filter((id) => myMovieIds.includes(id)).length;
-      const score = myMovieIds.length > 0 ? (commonCount / myMovieIds.length) * 100 : 0;
-      const { password, ...safeUser } = user;
-      return { ...safeUser, matchScore: Math.round(score), commonMovies: commonCount };
+      const score = myMovieCount > 0 ? (commonCount / myMovieCount) * 100 : 0;
+      if (!user.showAge) user.age = null;
+      return {
+        ...user,
+        matchScore: Math.round(score),
+        commonMovies: commonCount,
+      };
     });
 
     scored.sort((a, b) => b.matchScore - a.matchScore);
@@ -143,7 +153,7 @@ const discoverUsers = async (req, res) => {
 const getProfileStats = async (req, res) => {
   const userId = req.user.userId;
   try {
-    const [movieCount, matchCount, ratings, topMovies] = await Promise.all([
+    const [movieCount, matchCount, ratings, topMovies, movieYears] = await Promise.all([
       prisma.userMovie.count({ where: { userId } }),
       prisma.match.count({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
       prisma.movieRating.findMany({ where: { userId }, select: { rating: true } }),
@@ -153,17 +163,16 @@ const getProfileStats = async (req, res) => {
         orderBy: { movie: { id: 'desc' } },
         take: 4,
       }),
+      prisma.userMovie.findMany({
+        where: { userId },
+        select: { movie: { select: { year: true } } },
+      }),
     ]);
 
     const avgRating = ratings.length > 0
       ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
       : null;
 
-    // Favori era için ayrı sorgu — sadece year alanı
-    const movieYears = await prisma.userMovie.findMany({
-      where: { userId },
-      select: { movie: { select: { year: true } } },
-    });
     const eraCounts = {};
     for (const um of movieYears) {
       if (um.movie.year) {
@@ -182,10 +191,7 @@ const getProfileStats = async (req, res) => {
     else if (movieCount >= 1) watchStyle = { label: 'Başlangıç', emoji: '🌱' };
 
     res.json({
-      movieCount,
-      matchCount,
-      avgRating,
-      favoriteEra,
+      movieCount, matchCount, avgRating, favoriteEra,
       topMovies: topMovies.map((um) => um.movie),
       watchStyle,
     });
@@ -195,7 +201,6 @@ const getProfileStats = async (req, res) => {
   }
 };
 
-// Başka bir kullanıcının public profili
 const getUserProfile = async (req, res) => {
   const { userId } = req.params;
   try {
@@ -208,7 +213,6 @@ const getUserProfile = async (req, res) => {
       },
     });
     if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-    // Yaşı gizlediyse gösterme
     if (!user.showAge) user.age = null;
     res.json(user);
   } catch (err) {
@@ -216,19 +220,19 @@ const getUserProfile = async (req, res) => {
   }
 };
 
-// Başka bir kullanıcının public stats'ı
 const getUserStats = async (req, res) => {
   const { userId } = req.params;
   try {
-    const [userMovies, matches, ratings] = await Promise.all([
-      prisma.userMovie.findMany({ where: { userId }, include: { movie: true } }),
-      prisma.match.findMany({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
-      prisma.movieRating.findMany({ where: { userId } }),
+    const [userMovies, matchCount, ratings] = await Promise.all([
+      prisma.userMovie.findMany({
+        where: { userId },
+        select: { movie: { select: { year: true, title: true, poster: true, tmdbId: true } } },
+      }),
+      prisma.match.count({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
+      prisma.movieRating.findMany({ where: { userId }, select: { rating: true } }),
     ]);
 
     const movieCount = userMovies.length;
-    const matchCount = matches.length;
-
     const avgRating = ratings.length > 0
       ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
       : null;
@@ -244,8 +248,7 @@ const getUserStats = async (req, res) => {
       ? Object.entries(eraCounts).sort((a, b) => b[1] - a[1])[0][0] + 's'
       : null;
 
-    const topMovies = userMovies
-      .slice(-4).reverse()
+    const topMovies = userMovies.slice(-4).reverse()
       .map((um) => ({ title: um.movie.title, poster: um.movie.poster, tmdbId: um.movie.tmdbId }));
 
     let watchStyle = null;
@@ -260,4 +263,7 @@ const getUserStats = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, updateProfile, searchCharacters, discoverUsers, getProfileStats, getUserProfile, getUserStats };
+module.exports = {
+  getProfile, updateProfile, searchCharacters, discoverUsers,
+  getProfileStats, getUserProfile, getUserStats,
+};
