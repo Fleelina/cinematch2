@@ -64,7 +64,12 @@ export default function MoviesScreen({ navigation }) {
     }
   };
 
-  const goDetail = (tmdbId, title) => navigation.navigate('MovieDetail', { tmdbId, title });
+  const goDetail = (item) => navigation.navigate('MovieDetail', {
+    tmdbId: item.tmdbId,
+    title: item.title,
+    poster: item.poster,
+    year: item.year,
+  });
 
   const showSearch = searchResults.length > 0 || searching;
 
@@ -119,12 +124,12 @@ export default function MoviesScreen({ navigation }) {
                 ItemSeparatorComponent={() => <View style={styles.resultSep} />}
                 renderItem={({ item }) => (
                   <View style={styles.resultRow}>
-                    <TouchableOpacity onPress={() => goDetail(item.tmdbId, item.title)}>
+                    <TouchableOpacity onPress={() => goDetail(item)}>
                       <Poster uri={item.poster} size={42} radius={8} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.resultInfo}
-                      onPress={() => goDetail(item.tmdbId, item.title)}
+                      onPress={() => goDetail(item)}
                     >
                       <Text style={styles.resultTitle} numberOfLines={1}>{item.title}</Text>
                       {item.year && <Text style={styles.resultYear}>{item.year}</Text>}
@@ -165,7 +170,7 @@ export default function MoviesScreen({ navigation }) {
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={styles.myMovieRow}
-                    onPress={() => goDetail(item.tmdbId, item.title)}
+                    onPress={() => goDetail(item)}
                     activeOpacity={0.8}
                   >
                     <Poster uri={item.poster} size={52} radius={10} />

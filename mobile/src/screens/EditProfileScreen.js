@@ -48,18 +48,11 @@ export default function EditProfileScreen({ navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.3,   // daha düşük kalite = küçük dosya
+      quality: 0.6,
       base64: true,
     });
     if (!result.canceled && result.assets[0]) {
-      const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      // 500KB limit
-      if (base64.length > 500000) {
-        Alert.alert('Hata', 'Fotograf cok buyuk. Daha kucuk bir fotograf sec.');
-        return;
-      }
-      setAvatar(base64);
-      setAvatarType('photo');
+      await uploadToR2(result.assets[0]);
     }
   };
 
@@ -72,17 +65,32 @@ export default function EditProfileScreen({ navigation }) {
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.3,
+      quality: 0.6,
       base64: true,
     });
     if (!result.canceled && result.assets[0]) {
-      const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      if (base64.length > 500000) {
-        Alert.alert('Hata', 'Fotograf cok buyuk.');
-        return;
-      }
-      setAvatar(base64);
+      await uploadToR2(result.assets[0]);
+    }
+  };
+
+  const uploadToR2 = async (asset) => {
+    if (!asset.base64) {
+      Alert.alert('Hata', 'Gorsel yuklenemedi');
+      return;
+    }
+    setSaving(true);
+    try {
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const res = await api.post('/upload/avatar', {
+        base64: `data:${mimeType};base64,${asset.base64}`,
+        mimeType,
+      });
+      setAvatar(res.data.url);
       setAvatarType('photo');
+    } catch (err) {
+      Alert.alert('Hata', 'Gorsel yuklenemedi. Tekrar dene.');
+    } finally {
+      setSaving(false);
     }
   };
 

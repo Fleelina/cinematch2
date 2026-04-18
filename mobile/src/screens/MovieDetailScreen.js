@@ -52,7 +52,7 @@ function MovieDetailSkeleton() {
 }
 
 export default function MovieDetailScreen({ route, navigation }) {
-  const { tmdbId, title } = route.params;
+  const { tmdbId, title, poster: initialPoster, year: initialYear } = route.params;
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -148,7 +148,36 @@ export default function MovieDetailScreen({ route, navigation }) {
     }
   };
 
-  if (loading) return <MovieDetailSkeleton />;
+  if (loading) {
+    // initialPoster varsa hemen poster+başlık göster, arka planda yüklensin
+    if (initialPoster) {
+      return (
+        <ScrollView style={{ flex: 1, backgroundColor: '#0f0f0f' }}>
+          <View style={{ width: '100%', height: 220, backgroundColor: '#1c1c1c' }} />
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.backBtnText}>← Geri</Text>
+          </TouchableOpacity>
+          <View style={{ padding: 16, marginTop: -20 }}>
+            <View style={{ flexDirection: 'row', gap: 14, marginBottom: 16 }}>
+              <Image
+                source={{ uri: initialPoster }}
+                style={[styles.poster, { marginTop: -40 }]}
+              />
+              <View style={{ flex: 1, paddingTop: 8, gap: 8 }}>
+                <Text style={styles.title}>{title}</Text>
+                {initialYear && <Text style={styles.meta}>{initialYear}</Text>}
+                <View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: '#1e1e1e' }} />
+                <View style={{ width: 100, height: 12, borderRadius: 6, backgroundColor: '#1e1e1e' }} />
+              </View>
+            </View>
+            <View style={{ width: '100%', height: 48, borderRadius: 12, backgroundColor: '#1e1e1e', marginBottom: 20 }} />
+            <View style={{ width: '100%', height: 90, borderRadius: 14, backgroundColor: '#1e1e1e' }} />
+          </View>
+        </ScrollView>
+      );
+    }
+    return <MovieDetailSkeleton />;
+  }
 
   if (!movie) return (
     <View style={styles.center}><Text style={styles.errorText}>Film bilgisi yüklenemedi</Text></View>
