@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator, Alert
+  View, Text, FlatList, StyleSheet, ActivityIndicator,
+  Alert, TouchableOpacity, Image,
 } from 'react-native';
 import api from '../services/api';
+import { Colors, Radii, Shadows } from '../theme';
 
-export default function MatchesScreen() {
+export default function MatchesScreen({ navigation }) {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,7 +15,7 @@ export default function MatchesScreen() {
       try {
         const res = await api.get('/matches');
         setMatches(res.data);
-      } catch (err) {
+      } catch {
         Alert.alert('Hata', 'Eşleşmeler yüklenemedi');
       } finally {
         setLoading(false);
@@ -22,57 +24,237 @@ export default function MatchesScreen() {
     fetchMatches();
   }, []);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color="#E50914" size="large" /></View>;
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={Colors.red} size="large" />
+      </View>
+    );
+  }
 
-  if (matches.length === 0) return (
-    <View style={styles.center}>
-      <Text style={styles.emptyText}>Henüz eşleşmen yok 🎬</Text>
-      <Text style={styles.emptySubText}>Keşfet ekranından beğendiğin insanlara like at!</Text>
-    </View>
+  if (matches.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyEmoji}>🎬</Text>
+        <Text style={styles.emptyTitle}>Henüz eşleşmen yok</Text>
+        <Text style={styles.emptySub}>
+          Keşfet ekranından beğendiğin kişilere like at!
+        </Text>
+      </View>
+    );
+  }
+
+  // Bugün eşleşenleri öne al
+  const sorted = [...matches].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
   );
+  const today = sorted.filter(isToday);
+  const older = sorted.filter((m) => !isToday(m));
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Eşleşmeler</Text>
-      <FlatList
-        data={matches}
-        keyExtractor={item => item.matchId}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.user.name[0].toUpperCase()}</Text>
-            </View>
-            <View style={styles.info}>
-              <Text style={styles.name}>{item.user.name}</Text>
-              {item.user.bio ? <Text style={styles.bio}>{item.user.bio}</Text> : null}
-              <Text style={styles.date}>
-                {new Date(item.createdAt).toLocaleDateString('tr-TR')} tarihinde eşleştin
-              </Text>
-            </View>
-          </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Eşleşmeler</Text>
+        <Text style={styles.headerSub}>
+          {matches.length} kişiyle ortak film zevkin var
+        </Text>
+      </View>
+
+      {/* Bugünkü eşleşmeler — yatay scroll */}
+      {today.length > 0 && (
+        <View style={styles.todaySection}>
+          <Text style={styles.sectionLabel}>Yeni Eşleşmeler</Text>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={today}
+            keyExtractor={(item) => item.matchId + '_h'}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.todayCard}
+                onPress={() => navigation.navigate('Chat', {
+                  matchId: item.matchId, otherUser: item.user,
+                })}
+              >
+                <View style={styles.todayAvatarWrap}>
+                  <MatchAvatar user={item.user} size={58} />
+                  <View style={styles.onlineDot} />
+                </View>
+                <Text style={styles.todayName} numberOfLines={1}>
+                  {item.user.name.split(' ')[0]}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
+
+      {/* Tüm eşleşmeler — dikey liste */}
+      <View style={styles.listSection}>
+        {older.length > 0 && (
+          <Text style={[styles.sectionLabel, { marginHorizontal: 16 }]}>Tüm Eşleşmeler</Text>
         )}
-      />
+        <FlatList
+          data={older.length > 0 ? older : sorted}
+          keyExtractor={(item) => item.matchId}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          renderItem={({ item }) => (
+            <MatchRow
+              item={item}
+              onPress={() => navigation.navigate('Chat', {
+                matchId: item.matchId, otherUser: item.user,
+              })}
+              onAvatarPress={() => navigation.navigate('UserProfile', { userId: item.user.id })}
+            />
+          )}
+        />
+      </View>
     </View>
   );
 }
 
+function MatchRow({ item, onPress, onAvatarPress }) {
+  const daysAgo = getDaysAgo(item.createdAt);
+
+  return (
+    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.8}>
+      <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.9}>
+        <MatchAvatar user={item.user} size={50} />
+      </TouchableOpacity>
+
+      <View style={styles.matchInfo}>
+        <View style={styles.matchTop}>
+          <Text style={styles.matchName}>{item.user.name}</Text>
+          <Text style={styles.matchDate}>{daysAgo}</Text>
+        </View>
+        {item.user.bio ? (
+          <Text style={styles.matchBio} numberOfLines={1}>{item.user.bio}</Text>
+        ) : (
+          <Text style={styles.matchBioFallback}>Film zevkini paylaş →</Text>
+        )}
+      </View>
+
+      {/* Uyum skoru varsa göster */}
+      {item.matchScore != null && (
+        <View style={styles.scorePill}>
+          <Text style={styles.scorePillText}>%{item.matchScore}</Text>
+        </View>
+      )}
+
+      <Text style={styles.chevron}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
+function MatchAvatar({ user, size }) {
+  const AVATAR_COLORS = ['#c8102e', '#1d6a8a', '#2a6a3a', '#6a2a7a', '#6a4a1a'];
+  const colorIndex = user.name?.charCodeAt(0) % AVATAR_COLORS.length ?? 0;
+
+  if (user?.avatar) {
+    return (
+      <Image
+        source={{ uri: user.avatar }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: Colors.bgCard }}
+      />
+    );
+  }
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: AVATAR_COLORS[colorIndex],
+      justifyContent: 'center', alignItems: 'center',
+    }}>
+      <Text style={{ color: '#fff', fontSize: size * 0.38, fontWeight: '800' }}>
+        {user?.name?.[0]?.toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
+// ─── Yardımcı fonksiyonlar ───────────────────────────────────────────────────
+
+function isToday(match) {
+  const d = new Date(match.createdAt);
+  const now = new Date();
+  return d.getDate() === now.getDate() &&
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear();
+}
+
+function getDaysAgo(dateStr) {
+  const diff = Math.floor((new Date() - new Date(dateStr)) / 86400000);
+  if (diff === 0) return 'Bugün';
+  if (diff === 1) return 'Dün';
+  return `${diff} gün önce`;
+}
+
+// ─── Stiller ────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f', padding: 16 },
-  center: { flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' },
-  header: { color: '#fff', fontSize: 26, fontWeight: 'bold', marginBottom: 16, marginTop: 8 },
-  emptyText: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
-  emptySubText: { color: '#888', fontSize: 14, textAlign: 'center', marginTop: 8, paddingHorizontal: 32 },
-  card: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#1c1c1c',
-    borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#2a2a2a'
+  container: { flex: 1, backgroundColor: Colors.bg },
+  center: {
+    flex: 1, backgroundColor: Colors.bg,
+    justifyContent: 'center', alignItems: 'center', padding: 32,
   },
-  avatar: {
-    width: 50, height: 50, borderRadius: 25, backgroundColor: '#E50914',
-    justifyContent: 'center', alignItems: 'center', marginRight: 14
+
+  // Header
+  header: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16 },
+  headerTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: Colors.textPrimary },
+  headerSub: { fontSize: 12, color: Colors.textMuted, marginTop: 4 },
+
+  // Bugünkü eşleşmeler (yatay)
+  todaySection: { marginBottom: 20 },
+  sectionLabel: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 1.2,
+    textTransform: 'uppercase', color: Colors.textMuted,
+    marginBottom: 12, paddingHorizontal: 16,
   },
-  avatarText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  info: { flex: 1 },
-  name: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  bio: { color: '#aaa', fontSize: 13, marginTop: 2 },
-  date: { color: '#555', fontSize: 11, marginTop: 4 },
+  todayCard: { alignItems: 'center', gap: 7, width: 70 },
+  todayAvatarWrap: { position: 'relative' },
+  onlineDot: {
+    position: 'absolute', bottom: 1, right: 1,
+    width: 12, height: 12, borderRadius: 6,
+    backgroundColor: Colors.green,
+    borderWidth: 2, borderColor: Colors.bg,
+  },
+  todayName: {
+    fontSize: 11, color: Colors.textSecondary,
+    fontWeight: '600', textAlign: 'center',
+  },
+
+  // Liste
+  listSection: { flex: 1 },
+  matchCard: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginBottom: 10,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radii.lg, padding: 14,
+    borderWidth: 0.5, borderColor: Colors.border,
+    gap: 12,
+  },
+  matchInfo: { flex: 1 },
+  matchTop: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 3,
+  },
+  matchName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  matchDate: { fontSize: 10, color: Colors.textMuted },
+  matchBio: { fontSize: 12, color: Colors.textSecondary },
+  matchBioFallback: { fontSize: 12, color: Colors.red, fontWeight: '500' },
+  scorePill: {
+    backgroundColor: Colors.redDim,
+    borderRadius: Radii.pill,
+    borderWidth: 0.5, borderColor: Colors.redBorder,
+    paddingHorizontal: 9, paddingVertical: 4,
+  },
+  scorePillText: { fontSize: 11, fontWeight: '800', color: Colors.red },
+  chevron: { fontSize: 18, color: Colors.textHint, marginLeft: -4 },
+
+  // Boş durum
+  emptyEmoji: { fontSize: 56, marginBottom: 16 },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', marginBottom: 8 },
+  emptySub: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19 },
 });

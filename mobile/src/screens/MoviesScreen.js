@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
-  Image, StyleSheet, ActivityIndicator, Alert
+  Image, StyleSheet, ActivityIndicator, Alert, Pressable,
 } from 'react-native';
 import api from '../services/api';
+import { Colors, Radii, Shadows } from '../theme';
 
 export default function MoviesScreen({ navigation }) {
   const [myMovies, setMyMovies] = useState([]);
@@ -11,17 +12,18 @@ export default function MoviesScreen({ navigation }) {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  const fetchMyMovies = async () => {
+  const fetchMyMovies = useCallback(async () => {
     try {
       const res = await api.get('/movies/my');
       setMyMovies(res.data);
-    } catch (err) {
-      Alert.alert('Hata', 'Filmler yuklenemedi');
+    } catch {
+      Alert.alert('Hata', 'Filmler yüklenemedi');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => { fetchMyMovies(); }, []);
 
@@ -31,18 +33,22 @@ export default function MoviesScreen({ navigation }) {
     try {
       const res = await api.get(`/movies/search?query=${query}`);
       setSearchResults(res.data);
-    } catch (err) {
-      Alert.alert('Hata', 'Arama basarisiz');
+    } catch {
+      Alert.alert('Hata', 'Arama başarısız');
     } finally {
       setSearching(false);
     }
   };
 
+  const clearSearch = () => {
+    setQuery('');
+    setSearchResults([]);
+  };
+
   const addMovie = async (movie) => {
     try {
       await api.post('/movies/add', movie);
-      setSearchResults([]);
-      setQuery('');
+      clearSearch();
       fetchMyMovies();
     } catch (err) {
       Alert.alert('Hata', err.response?.data?.error || 'Film eklenemedi');
@@ -52,127 +58,243 @@ export default function MoviesScreen({ navigation }) {
   const removeMovie = async (movieId) => {
     try {
       await api.delete(`/movies/${movieId}`);
-      fetchMyMovies();
-    } catch (err) {
-      Alert.alert('Hata', 'Film kaldirilmadi');
+      setMyMovies((prev) => prev.filter((m) => m.id !== movieId));
+    } catch {
+      Alert.alert('Hata', 'Film kaldırılamadı');
     }
   };
 
-  const goToDetail = (tmdbId, title) => {
-    navigation.navigate('MovieDetail', { tmdbId, title });
-  };
+  const goDetail = (tmdbId, title) => navigation.navigate('MovieDetail', { tmdbId, title });
+
+  const showSearch = searchResults.length > 0 || searching;
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.watchlistBtn} onPress={() => navigation.navigate('Watchlist')}>
-        <Text style={styles.watchlistBtnText}>📋 Sonra İzle Listem</Text>
-      </TouchableOpacity>
-
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Film ara..."
-          placeholderTextColor="#888"
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={searchMovies}
-          returnKeyType="search"
-        />
-        <TouchableOpacity style={styles.searchBtn} onPress={searchMovies}>
-          <Text style={styles.searchBtnText}>Ara</Text>
+      {/* Üst bar */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Filmlerim</Text>
+        <TouchableOpacity
+          style={styles.watchlistBtn}
+          onPress={() => navigation.navigate('Watchlist')}
+        >
+          <Text style={styles.watchlistBtnText}>📋 Sonra İzle</Text>
         </TouchableOpacity>
       </View>
 
-      {searching && <ActivityIndicator color="#E50914" style={{ marginVertical: 12 }} />}
+      {/* Arama */}
+      <View style={[styles.searchRow, searchFocused && styles.searchRowFocused]}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Film ara ve ekle..."
+          placeholderTextColor={Colors.textMuted}
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={searchMovies}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
+          returnKeyType="search"
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={clearSearch} style={styles.clearBtn}>
+            <Text style={styles.clearBtnText}>✕</Text>
+          </TouchableOpacity>
+        )}
+        <Pressable style={styles.searchBtn} onPress={searchMovies}>
+          <Text style={styles.searchBtnText}>Ara</Text>
+        </Pressable>
+      </View>
 
-      {searchResults.length > 0 && (
-        <View style={styles.resultsContainer}>
-          <Text style={styles.sectionTitle}>Sonuclar</Text>
-          <FlatList
-            data={searchResults}
-            keyExtractor={item => item.tmdbId.toString()}
-            style={{ maxHeight: 250 }}
-            renderItem={({ item }) => (
-              <View style={styles.resultItem}>
-                <TouchableOpacity onPress={() => goToDetail(item.tmdbId, item.title)}>
-                  {item.poster
-                    ? <Image source={{ uri: item.poster }} style={styles.poster} />
-                    : <View style={styles.posterPlaceholder}><Text>🎬</Text></View>
-                  }
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.resultInfo} onPress={() => goToDetail(item.tmdbId, item.title)}>
-                  <Text style={styles.resultTitle}>{item.title}</Text>
-                  {item.year ? <Text style={styles.resultYear}>{item.year}</Text> : null}
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => addMovie(item)}>
-                  <Text style={styles.addIcon}>+</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          />
+      {/* Arama sonuçları */}
+      {showSearch && (
+        <View style={styles.resultsBox}>
+          {searching
+            ? <ActivityIndicator color={Colors.red} style={{ padding: 16 }} />
+            : (
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.tmdbId.toString()}
+                style={{ maxHeight: 240 }}
+                showsVerticalScrollIndicator={false}
+                ItemSeparatorComponent={() => <View style={styles.resultSep} />}
+                renderItem={({ item }) => (
+                  <View style={styles.resultRow}>
+                    <TouchableOpacity onPress={() => goDetail(item.tmdbId, item.title)}>
+                      <Poster uri={item.poster} size={42} radius={8} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.resultInfo}
+                      onPress={() => goDetail(item.tmdbId, item.title)}
+                    >
+                      <Text style={styles.resultTitle} numberOfLines={1}>{item.title}</Text>
+                      {item.year && <Text style={styles.resultYear}>{item.year}</Text>}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.addBtn} onPress={() => addMovie(item)}>
+                      <Text style={styles.addBtnText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              />
+            )
+          }
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>Profilimde ({myMovies.length})</Text>
-      {loading
-        ? <ActivityIndicator color="#E50914" />
-        : myMovies.length === 0
-          ? <Text style={styles.emptyText}>Henuz film eklemedin. Ara ve ekle!</Text>
-          : <FlatList
-              data={myMovies}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.myMovieItem}
-                  onPress={() => goToDetail(item.tmdbId, item.title)}
-                >
-                  {item.poster
-                    ? <Image source={{ uri: item.poster }} style={styles.poster} />
-                    : <View style={styles.posterPlaceholder}><Text>🎬</Text></View>
-                  }
-                  <View style={styles.resultInfo}>
-                    <Text style={styles.resultTitle}>{item.title}</Text>
-                    {item.year ? <Text style={styles.resultYear}>{item.year}</Text> : null}
-                  </View>
-                  <TouchableOpacity onPress={() => removeMovie(item.id)}>
-                    <Text style={styles.removeIcon}>✕</Text>
+      {/* Profil filmleri */}
+      <View style={styles.mySection}>
+        <Text style={styles.mySectionLabel}>
+          Profilimde · {myMovies.length} film
+        </Text>
+        {loading
+          ? <ActivityIndicator color={Colors.red} style={{ marginTop: 24 }} />
+          : myMovies.length === 0
+            ? (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyEmoji}>🎬</Text>
+                <Text style={styles.emptyTitle}>Henüz film yok</Text>
+                <Text style={styles.emptySub}>Film ara ve profiline ekle</Text>
+              </View>
+            )
+            : (
+              <FlatList
+                data={myMovies}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                ItemSeparatorComponent={() => <View style={styles.listSep} />}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.myMovieRow}
+                    onPress={() => goDetail(item.tmdbId, item.title)}
+                    activeOpacity={0.8}
+                  >
+                    <Poster uri={item.poster} size={52} radius={10} />
+                    <View style={styles.myMovieInfo}>
+                      <Text style={styles.myMovieTitle} numberOfLines={2}>{item.title}</Text>
+                      {item.year && <Text style={styles.myMovieYear}>{item.year}</Text>}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.removeBtn}
+                      onPress={() => removeMovie(item.id)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={styles.removeBtnText}>✕</Text>
+                    </TouchableOpacity>
                   </TouchableOpacity>
-                </TouchableOpacity>
-              )}
-            />
-      }
+                )}
+              />
+            )
+        }
+      </View>
+    </View>
+  );
+}
+
+function Poster({ uri, size, radius }) {
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size * 1.4, borderRadius: radius, backgroundColor: Colors.bgCard }}
+      />
+    );
+  }
+  return (
+    <View style={{
+      width: size, height: size * 1.4, borderRadius: radius,
+      backgroundColor: Colors.bgElevated, justifyContent: 'center', alignItems: 'center',
+    }}>
+      <Text style={{ fontSize: size * 0.4 }}>🎬</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f', padding: 16 },
+  container: { flex: 1, backgroundColor: Colors.bg },
+
+  // Header
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
+  },
+  headerTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: Colors.textPrimary },
   watchlistBtn: {
-    backgroundColor: '#1c1c1c', borderRadius: 12, padding: 12,
-    marginBottom: 12, borderWidth: 1, borderColor: '#333',
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radii.pill,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 0.5, borderColor: Colors.border,
   },
-  watchlistBtnText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
-  searchRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  watchlistBtnText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
+
+  // Arama
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: Colors.bgInput,
+    borderRadius: Radii.md, borderWidth: 0.5, borderColor: Colors.border,
+    paddingLeft: 12, paddingRight: 6, paddingVertical: 4,
+  },
+  searchRowFocused: { borderColor: Colors.red, backgroundColor: Colors.redDim },
+  searchIcon: { fontSize: 14, color: Colors.textMuted },
   searchInput: {
-    flex: 1, backgroundColor: '#1c1c1c', color: '#fff', borderRadius: 12,
-    padding: 12, fontSize: 15, borderWidth: 1, borderColor: '#333'
+    flex: 1, color: Colors.textPrimary, fontSize: 14, paddingVertical: 10,
   },
-  searchBtn: { backgroundColor: '#E50914', borderRadius: 12, paddingHorizontal: 16, justifyContent: 'center' },
-  searchBtnText: { color: '#fff', fontWeight: 'bold' },
-  resultsContainer: { backgroundColor: '#1c1c1c', borderRadius: 12, padding: 8, marginBottom: 16 },
-  sectionTitle: { color: '#aaa', fontSize: 12, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' },
-  resultItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 10 },
-  myMovieItem: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 8,
-    gap: 10, borderBottomWidth: 1, borderBottomColor: '#222'
+  clearBtn: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: Colors.bgElevated, justifyContent: 'center', alignItems: 'center',
   },
-  poster: { width: 40, height: 56, borderRadius: 6 },
-  posterPlaceholder: { width: 40, height: 56, borderRadius: 6, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
+  clearBtnText: { fontSize: 10, color: Colors.textSecondary },
+  searchBtn: {
+    backgroundColor: Colors.red, borderRadius: Radii.md - 2,
+    paddingHorizontal: 14, paddingVertical: 8,
+  },
+  searchBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+  // Sonuçlar
+  resultsBox: {
+    marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: Colors.bgCard, borderRadius: Radii.lg,
+    borderWidth: 0.5, borderColor: Colors.border, overflow: 'hidden',
+  },
+  resultRow: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: 10, gap: 10,
+  },
   resultInfo: { flex: 1 },
-  resultTitle: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  resultYear: { color: '#888', fontSize: 12 },
-  addIcon: { color: '#E50914', fontSize: 24, fontWeight: 'bold' },
-  removeIcon: { color: '#555', fontSize: 18 },
-  emptyText: { color: '#555', fontSize: 14, textAlign: 'center', marginTop: 24 },
+  resultTitle: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  resultYear: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  addBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: Colors.red, justifyContent: 'center', alignItems: 'center',
+  },
+  addBtnText: { color: '#fff', fontSize: 20, lineHeight: 22, fontWeight: '700' },
+  resultSep: { height: 0.5, backgroundColor: Colors.borderDim, marginHorizontal: 10 },
+
+  // Filmlerim
+  mySection: { flex: 1, paddingHorizontal: 16 },
+  mySectionLabel: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 1.2,
+    textTransform: 'uppercase', color: Colors.textMuted, marginBottom: 12,
+  },
+  myMovieRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 8, gap: 12,
+  },
+  myMovieInfo: { flex: 1 },
+  myMovieTitle: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  myMovieYear: { fontSize: 11, color: Colors.textMuted, marginTop: 3 },
+  removeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: Colors.bgElevated,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  removeBtnText: { fontSize: 11, color: Colors.textSecondary },
+  listSep: { height: 0.5, backgroundColor: Colors.borderDim },
+
+  // Boş durum
+  emptyWrap: { alignItems: 'center', paddingTop: 48 },
+  emptyEmoji: { fontSize: 44, marginBottom: 12 },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '700', marginBottom: 6 },
+  emptySub: { color: Colors.textSecondary, fontSize: 13 },
 });

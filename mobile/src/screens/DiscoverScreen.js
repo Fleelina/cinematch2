@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, Image, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Animated, PanResponder, Dimensions, Alert
+  TouchableOpacity, Animated, PanResponder, Dimensions, Alert, Pressable,
 } from 'react-native';
 import api from '../services/api';
+import { Colors, Radii, Shadows } from '../theme';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
+const { width: SW, height: SH } = Dimensions.get('window');
+const SWIPE_THRESHOLD = SW * 0.25;
+const CARD_H = SH * 0.56;
 
 export default function DiscoverScreen({ navigation }) {
   const [users, setUsers] = useState([]);
@@ -27,8 +28,8 @@ export default function DiscoverScreen({ navigation }) {
       setUsers(res.data);
       setCurrentIndex(0);
       position.setValue({ x: 0, y: 0 });
-    } catch (err) {
-      Alert.alert('Hata', 'Kullanicilar yuklenemedi');
+    } catch {
+      Alert.alert('Hata', 'Kullanıcılar yüklenemedi');
     } finally {
       setLoading(false);
     }
@@ -42,253 +43,366 @@ export default function DiscoverScreen({ navigation }) {
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gestureState) => {
-        position.setValue({ x: gestureState.dx, y: gestureState.dy });
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx > SWIPE_THRESHOLD) {
-          triggerSwipeRight();
-        } else if (gestureState.dx < -SWIPE_THRESHOLD) {
-          triggerSwipeLeft();
-        } else {
-          Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
-        }
+      onPanResponderMove: (_, g) => position.setValue({ x: g.dx, y: g.dy }),
+      onPanResponderRelease: (_, g) => {
+        if (g.dx > SWIPE_THRESHOLD) triggerSwipeRight();
+        else if (g.dx < -SWIPE_THRESHOLD) triggerSwipeLeft();
+        else Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
       },
     })
   ).current;
 
   const triggerSwipeRight = () => {
     Animated.timing(position, {
-      toValue: { x: SCREEN_WIDTH + 100, y: 0 },
-      duration: 280, useNativeDriver: false,
-    }).start(() => {
-      position.setValue({ x: 0, y: 0 });
-      handleLike(users[currentIndex].id);
-    });
+      toValue: { x: SW + 100, y: 0 }, duration: 280, useNativeDriver: false,
+    }).start(() => { position.setValue({ x: 0, y: 0 }); handleLike(users[currentIndex].id); });
   };
 
   const triggerSwipeLeft = () => {
     Animated.timing(position, {
-      toValue: { x: -SCREEN_WIDTH - 100, y: 0 },
-      duration: 280, useNativeDriver: false,
-    }).start(() => {
-      position.setValue({ x: 0, y: 0 });
-      handleDislike(users[currentIndex].id);
-    });
+      toValue: { x: -SW - 100, y: 0 }, duration: 280, useNativeDriver: false,
+    }).start(() => { position.setValue({ x: 0, y: 0 }); handleDislike(users[currentIndex].id); });
   };
 
   const handleLike = async (targetId) => {
     setActionLoading(targetId);
     try {
       const res = await api.post(`/matches/like/${targetId}`);
-      if (res.data.matched) Alert.alert('Eslestiniz! 🎉', 'Ortak film zevkiniz var!');
-    } catch (err) {}
+      if (res.data.matched) {
+        Alert.alert('Eşleştiniz! 🎉', 'Ortak film zevkiniz var. Mesaj atmaya başlayın!');
+      }
+    } catch { /* sessiz */ }
     finally {
       setActionLoading(null);
-      setCurrentIndex((prev) => prev + 1);
+      setCurrentIndex((p) => p + 1);
     }
   };
 
   const handleDislike = async (targetId) => {
     setActionLoading(targetId);
-    try { await api.post(`/matches/dislike/${targetId}`); } catch (err) {}
+    try { await api.post(`/matches/dislike/${targetId}`); } catch { /* sessiz */ }
     finally {
       setActionLoading(null);
-      setCurrentIndex((prev) => prev + 1);
+      setCurrentIndex((p) => p + 1);
     }
   };
 
   const rotate = position.x.interpolate({
-    inputRange: [-SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2],
-    outputRange: ['-8deg', '0deg', '8deg'],
-    extrapolate: 'clamp',
+    inputRange: [-SW / 2, 0, SW / 2], outputRange: ['-7deg', '0deg', '7deg'], extrapolate: 'clamp',
+  });
+  const likeOpacity = position.x.interpolate({ inputRange: [0, SW / 4], outputRange: [0, 1], extrapolate: 'clamp' });
+  const nopeOpacity = position.x.interpolate({ inputRange: [-SW / 4, 0], outputRange: [1, 0], extrapolate: 'clamp' });
+  const nextScale = position.x.interpolate({
+    inputRange: [-SW, 0, SW], outputRange: [1, 0.93, 1], extrapolate: 'clamp',
   });
 
-  const likeOpacity = position.x.interpolate({
-    inputRange: [0, SCREEN_WIDTH / 4], outputRange: [0, 1], extrapolate: 'clamp',
-  });
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={Colors.red} size="large" />
+        <Text style={styles.loadingText}>Kişiler yükleniyor...</Text>
+      </View>
+    );
+  }
 
-  const nopeOpacity = position.x.interpolate({
-    inputRange: [-SCREEN_WIDTH / 4, 0], outputRange: [1, 0], extrapolate: 'clamp',
-  });
+  const current = users[currentIndex];
+  const next = users[currentIndex + 1];
 
-  if (loading) return (
-    <View style={styles.center}>
-      <ActivityIndicator color="#E50914" size="large" />
-    </View>
-  );
-
-  const currentUser = users[currentIndex];
-  const nextUser = users[currentIndex + 1];
-
-  if (!currentUser) return (
-    <View style={styles.center}>
-      <Text style={styles.doneEmoji}>🎬</Text>
-      <Text style={styles.doneText}>Tur {round} tamamlandi!</Text>
-      <Text style={styles.doneSubText}>Atlananlar 24 saat sonra tekrar gorunecek</Text>
-      <TouchableOpacity style={styles.reloadBtn} onPress={refresh}>
-        <Text style={styles.reloadBtnText}>🔄 Yenile</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  if (!current) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.doneEmoji}>🎬</Text>
+        <Text style={styles.doneTitle}>Tur {round} tamamlandı!</Text>
+        <Text style={styles.doneSub}>Atlananlar 24 saat sonra tekrar görünecek</Text>
+        <Pressable style={styles.refreshBtn} onPress={refresh}>
+          <Text style={styles.refreshBtnText}>Yenile</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.cardContainer}>
+      {/* Ekran başlığı */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Keşfet</Text>
+          <Text style={styles.headerSub}>Film zevkine göre kişiler</Text>
+        </View>
+        <View style={styles.roundBadge}>
+          <Text style={styles.roundText}>Tur {round}</Text>
+        </View>
+      </View>
 
+      {/* Kart alanı */}
+      <View style={styles.cardArea}>
         {/* Arka kart */}
-        {nextUser && (
-          <View style={[styles.card, styles.nextCard]}>
-            <View style={styles.cardInner}>
-              <View style={styles.avatarLarge}>
-                {nextUser.avatar
-                  ? <Image source={{ uri: nextUser.avatar }} style={styles.avatarImg} />
-                  : <Text style={styles.avatarLargeText}>{nextUser.name[0].toUpperCase()}</Text>
-                }
-              </View>
-              <Text style={styles.cardName}>{nextUser.name}</Text>
-            </View>
-          </View>
+        {next && (
+          <Animated.View style={[styles.card, styles.cardBack, { transform: [{ scale: nextScale }] }]}>
+            <UserCardContent user={next} compact />
+          </Animated.View>
         )}
 
         {/* Aktif kart */}
         <Animated.View
           style={[styles.card, {
-            transform: [{ translateX: position.x }, { translateY: position.y }, { rotate }],
+            transform: [
+              { translateX: position.x },
+              { translateY: position.y },
+              { rotate },
+            ],
           }]}
           {...panResponder.panHandlers}
         >
+          {/* Swipe badge'leri */}
           <Animated.View style={[styles.badge, styles.badgeLike, { opacity: likeOpacity }]}>
-            <Text style={styles.badgeText}>LIKE ♥</Text>
+            <Text style={styles.badgeLikeText}>LIKE ♥</Text>
           </Animated.View>
           <Animated.View style={[styles.badge, styles.badgeNope, { opacity: nopeOpacity }]}>
-            <Text style={styles.badgeText}>NOPE ✕</Text>
+            <Text style={styles.badgeNopeText}>NOPE ✕</Text>
           </Animated.View>
 
-          {/* Karta tıklayınca profil aç */}
           <TouchableOpacity
-            style={styles.cardInner}
-            activeOpacity={0.92}
-            onPress={() => navigation.navigate('UserProfile', { userId: currentUser.id })}
+            activeOpacity={0.95}
+            onPress={() => navigation.navigate('UserProfile', { userId: current.id })}
           >
-            <View style={styles.avatarLarge}>
-              {currentUser.avatar
-                ? <Image source={{ uri: currentUser.avatar }} style={styles.avatarImg} />
-                : <Text style={styles.avatarLargeText}>{currentUser.name[0].toUpperCase()}</Text>
-              }
-            </View>
-            <Text style={styles.cardName}>{currentUser.name}</Text>
-            {currentUser.username
-              ? <Text style={styles.cardUsername}>@{currentUser.username}</Text>
-              : null}
-            {currentUser.bio
-              ? <Text style={styles.cardBio}>{currentUser.bio}</Text>
-              : null}
-
-            <View style={styles.scoreRow}>
-              <View style={styles.scoreBadge}>
-                <Text style={styles.scoreNum}>%{currentUser.matchScore}</Text>
-                <Text style={styles.scoreLabel}>Uyum</Text>
-              </View>
-              <View style={styles.scoreBadge}>
-                <Text style={styles.scoreNum}>{currentUser.commonMovies}</Text>
-                <Text style={styles.scoreLabel}>Ortak Film</Text>
-              </View>
-            </View>
-
-            {currentUser.movies?.length > 0 && (
-              <View style={styles.moviesList}>
-                <Text style={styles.moviesTitle}>Izledikleri</Text>
-                {currentUser.movies.slice(0, 3).map((m) => (
-                  <Text key={m.id} style={styles.movieTag}>🎬 {m.movie.title}</Text>
-                ))}
-              </View>
-            )}
+            <UserCardContent user={current} />
           </TouchableOpacity>
         </Animated.View>
       </View>
 
       {/* Aksiyon butonları */}
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.nopeBtn]}
+        <ActionBtn
           onPress={triggerSwipeLeft}
+          style={styles.skipBtn}
           disabled={!!actionLoading}
-        >
-          <Text style={styles.actionIcon}>✕</Text>
-          <Text style={styles.actionLabel}>Atla</Text>
-        </TouchableOpacity>
+          label="Atla"
+          icon="✕"
+          iconColor="#ff2840"
+        />
         <Text style={styles.counter}>{currentIndex + 1} / {users.length}</Text>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.likeBtn]}
+        <ActionBtn
           onPress={triggerSwipeRight}
+          style={styles.likeBtn}
           disabled={!!actionLoading}
-        >
-          <Text style={styles.actionIcon}>♥</Text>
-          <Text style={styles.actionLabel}>Begen</Text>
-        </TouchableOpacity>
+          label="Beğen"
+          icon="♥"
+          iconColor="#fff"
+        />
       </View>
     </View>
   );
 }
 
+function UserCardContent({ user, compact = false }) {
+  return (
+    <View style={[styles.cardInner, compact && styles.cardInnerCompact]}>
+      {/* Avatar */}
+      <View style={styles.avatarWrap}>
+        {user.avatar
+          ? <Image source={{ uri: user.avatar }} style={styles.avatarImg} />
+          : (
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarInitial}>{user.name?.[0]?.toUpperCase()}</Text>
+            </View>
+          )
+        }
+        <View style={styles.avatarRing} />
+      </View>
+
+      <Text style={styles.cardName}>{user.name}</Text>
+      {user.username ? <Text style={styles.cardUsername}>@{user.username}</Text> : null}
+      {!compact && user.bio ? (
+        <Text style={styles.cardBio} numberOfLines={2}>{user.bio}</Text>
+      ) : null}
+
+      {/* Skor satırı */}
+      {!compact && (
+        <View style={styles.scoreRow}>
+          <View style={styles.scoreBox}>
+            <Text style={styles.scoreNum}>%{user.matchScore}</Text>
+            <Text style={styles.scoreLabel}>Uyum</Text>
+          </View>
+          <View style={styles.scoreDivider} />
+          <View style={styles.scoreBox}>
+            <Text style={styles.scoreNum}>{user.commonMovies}</Text>
+            <Text style={styles.scoreLabel}>Ortak Film</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Filmler */}
+      {!compact && user.movies?.length > 0 && (
+        <View style={styles.moviesWrap}>
+          <Text style={styles.moviesLabel}>İzledikleri</Text>
+          {user.movies.slice(0, 3).map((m) => (
+            <Text key={m.id} style={styles.movieItem}>🎬 {m.movie.title}</Text>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ActionBtn({ onPress, style, disabled, label, icon, iconColor }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  return (
+    <View style={{ alignItems: 'center', gap: 5 }}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Pressable
+          style={[styles.actionBtn, style]}
+          onPress={onPress}
+          disabled={disabled}
+          onPressIn={() => Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, speed: 50 }).start()}
+          onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
+        >
+          <Text style={{ fontSize: 26, color: iconColor }}>{icon}</Text>
+        </Pressable>
+      </Animated.View>
+      <Text style={styles.actionLabel}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#0f0f0f' },
-  cardContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: 16, marginTop: 8 },
+  container: { flex: 1, backgroundColor: Colors.bg },
+  center: {
+    flex: 1, backgroundColor: Colors.bg,
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  loadingText: { color: Colors.textMuted, marginTop: 14, fontSize: 13 },
+
+  // Header
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 56, paddingBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: Colors.textPrimary,
+  },
+  headerSub: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  roundBadge: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radii.pill,
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderWidth: 0.5, borderColor: Colors.border,
+  },
+  roundText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '600' },
+
+  // Kartlar
+  cardArea: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    marginHorizontal: 16, marginTop: 4,
+  },
   card: {
     position: 'absolute',
-    width: SCREEN_WIDTH - 32,
-    height: SCREEN_HEIGHT * 0.58,
-    borderRadius: 24,
-    backgroundColor: '#1c1c1c',
-    borderWidth: 1, borderColor: '#2a2a2a',
-    elevation: 5, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10,
+    width: SW - 32,
+    minHeight: CARD_H,
+    borderRadius: Radii.xl,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 0.5, borderColor: Colors.border,
     overflow: 'hidden',
+    ...Shadows.card,
   },
-  nextCard: { transform: [{ scale: 0.95 }], opacity: 0.6 },
-  cardInner: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  cardBack: { transform: [{ scale: 0.93 }], opacity: 0.6 },
+  cardInner: {
+    padding: 28, alignItems: 'center',
+  },
+  cardInnerCompact: { padding: 24 },
+
+  // Swipe badge'leri
   badge: {
-    position: 'absolute', top: 24, padding: 8, paddingHorizontal: 16,
-    borderRadius: 8, borderWidth: 3, zIndex: 10,
+    position: 'absolute', top: 22, zIndex: 10,
+    paddingVertical: 6, paddingHorizontal: 14,
+    borderRadius: Radii.sm, borderWidth: 2,
   },
-  badgeLike: { left: 16, borderColor: '#00c853', backgroundColor: 'rgba(0,200,83,0.2)', transform: [{ rotate: '-15deg' }] },
-  badgeNope: { right: 16, borderColor: '#E50914', backgroundColor: 'rgba(229,9,20,0.2)', transform: [{ rotate: '15deg' }] },
-  badgeText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
-  avatarLarge: {
-    width: 90, height: 90, borderRadius: 45,
-    backgroundColor: '#E50914', justifyContent: 'center', alignItems: 'center',
-    marginBottom: 14, overflow: 'hidden',
+  badgeLike: {
+    left: 14, borderColor: Colors.green, backgroundColor: Colors.greenDim,
+    transform: [{ rotate: '-12deg' }],
   },
-  avatarImg: { width: 90, height: 90 },
-  avatarLargeText: { color: '#fff', fontSize: 40, fontWeight: 'bold' },
-  cardName: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 4, textAlign: 'center' },
-  cardUsername: { color: '#E50914', fontSize: 13, marginBottom: 8 },
-  cardBio: { color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 14, paddingHorizontal: 8 },
-  scoreRow: { flexDirection: 'row', gap: 14, marginBottom: 18 },
-  scoreBadge: {
-    backgroundColor: '#0f0f0f', borderRadius: 12,
-    paddingVertical: 10, paddingHorizontal: 18,
-    alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a',
+  badgeLikeText: { color: Colors.green, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
+  badgeNope: {
+    right: 14, borderColor: '#ff2840', backgroundColor: 'rgba(255,40,64,0.12)',
+    transform: [{ rotate: '12deg' }],
   },
-  scoreNum: { color: '#E50914', fontSize: 20, fontWeight: 'bold' },
-  scoreLabel: { color: '#888', fontSize: 11, marginTop: 2 },
-  moviesList: { width: '100%' },
-  moviesTitle: { color: '#555', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 6, textAlign: 'center' },
-  movieTag: { color: '#ccc', fontSize: 12, marginBottom: 3, textAlign: 'center' },
+  badgeNopeText: { color: '#ff2840', fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
+
+  // Avatar
+  avatarWrap: { position: 'relative', marginBottom: 14 },
+  avatarImg: { width: 88, height: 88, borderRadius: 44 },
+  avatarFallback: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: Colors.red,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarInitial: { color: '#fff', fontSize: 36, fontWeight: '800' },
+  avatarRing: {
+    position: 'absolute', inset: -3,
+    width: 94, height: 94, borderRadius: 47,
+    borderWidth: 1.5, borderColor: Colors.redBorder,
+    top: -3, left: -3,
+  },
+
+  cardName: {
+    fontSize: 22, fontWeight: '800', letterSpacing: -0.3,
+    color: Colors.textPrimary, marginBottom: 3, textAlign: 'center',
+  },
+  cardUsername: { fontSize: 12, color: Colors.red, marginBottom: 8, fontWeight: '600' },
+  cardBio: {
+    fontSize: 12, color: Colors.textSecondary, textAlign: 'center',
+    lineHeight: 18, marginBottom: 16, paddingHorizontal: 8,
+  },
+
+  // Skor
+  scoreRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.bg,
+    borderRadius: Radii.lg, borderWidth: 0.5, borderColor: Colors.border,
+    marginBottom: 18, overflow: 'hidden',
+  },
+  scoreBox: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  scoreDivider: { width: 0.5, height: 32, backgroundColor: Colors.border },
+  scoreNum: { fontSize: 22, fontWeight: '800', color: Colors.red, lineHeight: 24 },
+  scoreLabel: { fontSize: 9, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 3 },
+
+  // Filmler
+  moviesWrap: { width: '100%' },
+  moviesLabel: {
+    fontSize: 9, color: Colors.textHint, fontWeight: '700',
+    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 7, textAlign: 'center',
+  },
+  movieItem: { fontSize: 12, color: Colors.textSecondary, marginBottom: 4, textAlign: 'center' },
+
+  // Aksiyonlar
   actions: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    gap: 32, paddingBottom: 24, paddingTop: 8,
+    gap: 36, paddingBottom: 28, paddingTop: 8,
   },
-  actionBtn: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', elevation: 3 },
-  nopeBtn: { backgroundColor: '#1c1c1c', borderWidth: 2, borderColor: '#E50914' },
-  likeBtn: { backgroundColor: '#E50914' },
-  actionIcon: { fontSize: 26, color: '#fff' },
-  actionLabel: { color: '#888', fontSize: 10, marginTop: 2 },
-  counter: { color: '#555', fontSize: 13 },
-  doneEmoji: { fontSize: 64, marginBottom: 16 },
-  doneText: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' },
-  doneSubText: { color: '#888', fontSize: 14, textAlign: 'center', marginBottom: 24 },
-  reloadBtn: { backgroundColor: '#E50914', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 40 },
-  reloadBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  actionBtn: {
+    borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center',
+  },
+  skipBtn: {
+    width: 62, height: 62,
+    backgroundColor: Colors.bgCard,
+    borderWidth: 1.5, borderColor: 'rgba(255,40,64,0.3)',
+  },
+  likeBtn: {
+    width: 68, height: 68,
+    backgroundColor: Colors.red,
+    ...Shadows.red,
+  },
+  actionLabel: { fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  counter: { fontSize: 12, color: Colors.textHint, minWidth: 40, textAlign: 'center' },
+
+  // Done ekranı
+  doneEmoji: { fontSize: 60, marginBottom: 16 },
+  doneTitle: { color: Colors.textPrimary, fontSize: 20, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
+  doneSub: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 28 },
+  refreshBtn: {
+    backgroundColor: Colors.red, borderRadius: Radii.md,
+    paddingVertical: 14, paddingHorizontal: 40,
+    ...Shadows.red,
+  },
+  refreshBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });
