@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, Image, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Animated, PanResponder, Dimensions, Alert, LinearGradient
+  TouchableOpacity, Animated, PanResponder, Dimensions, Alert
 } from 'react-native';
 import api from '../services/api';
 
@@ -292,11 +292,9 @@ const styles = StyleSheet.create({
   cardGradient: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: '55%',
-    backgroundColor: 'transparent',
-    // Simulated gradient via shadow
+    backgroundColor: 'rgba(0,0,0,0.01)',
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    background: 'linear-gradient(transparent, #000)',
   },
 
   // Swipe etiketleri

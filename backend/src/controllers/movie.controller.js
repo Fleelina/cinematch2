@@ -158,7 +158,8 @@ const getMovieDetail = async (req, res) => {
   const tmdbIdInt = parseInt(tmdbId);
 
   try {
-    const [trDetailRes, enDetailRes, creditsRes] = await Promise.all([
+    // TMDB + DB sorguları tamamen paralel
+    const [trDetailRes, enDetailRes, creditsRes, movieInDb, watchlistItem] = await Promise.all([
       axios.get(`${TMDB_BASE}/movie/${tmdbId}`, {
         params: { api_key: process.env.TMDB_API_KEY, language: 'tr-TR' },
       }),
@@ -168,27 +169,23 @@ const getMovieDetail = async (req, res) => {
       axios.get(`${TMDB_BASE}/movie/${tmdbId}/credits`, {
         params: { api_key: process.env.TMDB_API_KEY, language: 'en-US' },
       }),
+      prisma.movie.findUnique({
+        where: { tmdbId: tmdbIdInt },
+        include: { users: { select: { userId: true } }, ratings: true },
+      }),
+      prisma.watchlist.findUnique({
+        where: { userId_tmdbId: { userId, tmdbId: tmdbIdInt } },
+        select: { id: true },
+      }),
     ]);
 
     const m = trDetailRes.data;
     const mEn = enDetailRes.data;
     const credits = creditsRes.data;
 
-    // Başlık: her zaman orijinal isim (original_title)
     const title = m.original_title || mEn.original_title || mEn.title || m.title;
-    // Açıklama: EN her zaman, TR varsa ekstra gönder
     const overviewEn = mEn.overview || '';
     const overviewTr = (m.overview && m.overview.trim().length > 20) ? m.overview : '';
-
-    const [movieInDb, watchlistItem] = await Promise.all([
-      prisma.movie.findUnique({
-        where: { tmdbId: tmdbIdInt },
-        include: { users: true, ratings: true },
-      }),
-      prisma.watchlist.findUnique({
-        where: { userId_tmdbId: { userId, tmdbId: tmdbIdInt } },
-      }),
-    ]);
 
     const addedByCount = movieInDb ? movieInDb.users.length : 0;
     const isAdded = movieInDb ? movieInDb.users.some((um) => um.userId === userId) : false;

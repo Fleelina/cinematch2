@@ -14,12 +14,13 @@ import MessagesScreen from '../screens/MessagesScreen';
 import MoviesScreen from '../screens/MoviesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import MovieDetailScreen from '../screens/MovieDetailScreen';
+import PersonScreen from '../screens/PersonScreen';
+import SimilarMoviesScreen from '../screens/SimilarMoviesScreen';
 import SwipeScreen from '../screens/SwipeScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import ChatScreen from '../screens/ChatScreen';
 import MatchesScreen from '../screens/MatchesScreen';
-import PersonScreen from '../screens/PersonScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 
 const Stack = createStackNavigator();
@@ -42,7 +43,12 @@ function MainTabs() {
 
   const tabScreenOptions = {
     headerShown: true,
-    headerStyle: { backgroundColor: '#0f0f0f', shadowColor: 'transparent', elevation: 0, borderBottomWidth: 0 },
+    headerStyle: {
+      backgroundColor: '#0f0f0f',
+      shadowColor: 'transparent',
+      elevation: 0,
+      borderBottomWidth: 0,
+    },
     headerTintColor: '#fff',
     headerTitleStyle: { fontWeight: '700', fontSize: 20 },
     headerLeft: () => <HamburgerButton onPress={() => setDrawerOpen(true)} />,
@@ -73,7 +79,11 @@ function MainTabs() {
         <Tab.Screen
           name="Mesajlar"
           component={MessagesScreen}
-          options={{ title: 'Mesajlar', tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💬</Text> }}
+          options={{
+            title: 'Mesajlar',
+            headerShown: false,
+            tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💬</Text>,
+          }}
         />
       </Tab.Navigator>
 
@@ -89,11 +99,12 @@ function AppStack() {
       <Stack.Screen name="MovieDetail" component={MovieDetailScreen} />
       <Stack.Screen name="Person" component={PersonScreen} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+      <Stack.Screen name="SimilarMovies" component={SimilarMoviesScreen} />
       <Stack.Screen name="Watchlist" component={WatchlistScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="Matches" component={MatchesScreen} />
-      <Stack.Screen name="Profil" component={ProfileScreen} />
+      <Stack.Screen name="MyProfile" component={ProfileScreen} />
     </Stack.Navigator>
   );
 }

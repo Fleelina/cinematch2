@@ -72,6 +72,23 @@ export default function ProfileScreen({ navigation }) {
     ? `${user.name}, ${user.age}`
     : user?.name;
 
+  if (loadingStats) return (
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <View style={styles.topBar}>
+        <Text style={styles.headerTitle}>Profil</Text>
+        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#1e1e1e' }} />
+      </View>
+      <View style={styles.heroSection}>
+        <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: '#1e1e1e', marginBottom: 14 }} />
+        <View style={{ width: 140, height: 20, borderRadius: 8, backgroundColor: '#1e1e1e', marginBottom: 8 }} />
+        <View style={{ width: 100, height: 14, borderRadius: 6, backgroundColor: '#1e1e1e' }} />
+      </View>
+      <View style={{ flexDirection: 'row', marginHorizontal: 16, gap: 10 }}>
+        {[1,2,3].map((i) => <View key={i} style={{ flex: 1, height: 80, borderRadius: 16, backgroundColor: '#1e1e1e' }} />)}
+      </View>
+    </ScrollView>
+  );
+
   return (
     <ScrollView
       style={styles.container}

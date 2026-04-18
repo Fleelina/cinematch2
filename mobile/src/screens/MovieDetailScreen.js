@@ -6,6 +6,51 @@ import {
 import api from '../services/api';
 import CineMatchRating from '../components/CineMatchRating';
 
+// Skeleton placeholder kutusu
+function Skeleton({ width, height, borderRadius = 8, style }) {
+  return (
+    <View style={[
+      { width, height, borderRadius, backgroundColor: '#1e1e1e' },
+      style,
+    ]} />
+  );
+}
+
+function MovieDetailSkeleton() {
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: '#0f0f0f' }}>
+      {/* Backdrop */}
+      <Skeleton width="100%" height={220} borderRadius={0} />
+      <View style={{ padding: 16, marginTop: -20 }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', gap: 14, marginBottom: 16 }}>
+          <Skeleton width={110} height={160} borderRadius={12} style={{ marginTop: -40 }} />
+          <View style={{ flex: 1, paddingTop: 8, gap: 8 }}>
+            <Skeleton width="90%" height={20} />
+            <Skeleton width="60%" height={14} />
+            <Skeleton width="50%" height={14} />
+            <Skeleton width="70%" height={14} />
+          </View>
+        </View>
+        {/* Buton */}
+        <Skeleton width="100%" height={48} borderRadius={12} style={{ marginBottom: 8 }} />
+        <Skeleton width="60%" height={12} borderRadius={6} style={{ alignSelf: 'center', marginBottom: 20 }} />
+        {/* Puan kutusu */}
+        <Skeleton width="100%" height={90} borderRadius={14} style={{ marginBottom: 20 }} />
+        {/* Türler */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+          {[80, 60, 70].map((w, i) => <Skeleton key={i} width={w} height={28} borderRadius={20} />)}
+        </View>
+        {/* Overview */}
+        <Skeleton width="40%" height={18} style={{ marginBottom: 10 }} />
+        <Skeleton width="100%" height={14} style={{ marginBottom: 6 }} />
+        <Skeleton width="100%" height={14} style={{ marginBottom: 6 }} />
+        <Skeleton width="80%" height={14} />
+      </View>
+    </ScrollView>
+  );
+}
+
 export default function MovieDetailScreen({ route, navigation }) {
   const { tmdbId, title } = route.params;
   const [movie, setMovie] = useState(null);
@@ -103,9 +148,7 @@ export default function MovieDetailScreen({ route, navigation }) {
     }
   };
 
-  if (loading) return (
-    <View style={styles.center}><ActivityIndicator color="#E50914" size="large" /></View>
-  );
+  if (loading) return <MovieDetailSkeleton />;
 
   if (!movie) return (
     <View style={styles.center}><Text style={styles.errorText}>Film bilgisi yüklenemedi</Text></View>

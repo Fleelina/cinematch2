@@ -87,14 +87,31 @@ const searchCharacters = async (req, res) => {
 
 const discoverUsers = async (req, res) => {
   const userId = req.user.userId;
+  // 24 saat cooldown — dislike'lananlar 24 saat sonra tekrar görünür
+  const DISLIKE_COOLDOWN_HOURS = 24;
 
   try {
-    const interactions = await prisma.interaction.findMany({
-      where: { fromUserId: userId },
+    // Sadece LIKE'lananları kalcı olarak dışla
+    const likes = await prisma.interaction.findMany({
+      where: { fromUserId: userId, type: 'LIKE' },
       select: { toUserId: true },
     });
-    const excludedIds = interactions.map((i) => i.toUserId);
-    excludedIds.push(userId);
+    const likedIds = likes.map((i) => i.toUserId);
+    likedIds.push(userId); // kendini gösterme
+
+    // DISLIKE'lananları cooldown süresine göre dışla
+    const cooldownDate = new Date(Date.now() - DISLIKE_COOLDOWN_HOURS * 60 * 60 * 1000);
+    const recentDislikes = await prisma.interaction.findMany({
+      where: {
+        fromUserId: userId,
+        type: 'DISLIKE',
+        createdAt: { gte: cooldownDate }, // sadece son 24 saattekiler
+      },
+      select: { toUserId: true },
+    });
+    const recentDislikedIds = recentDislikes.map((i) => i.toUserId);
+
+    const excludedIds = [...new Set([...likedIds, ...recentDislikedIds])];
 
     const myMovies = await prisma.userMovie.findMany({
       where: { userId },
@@ -126,25 +143,29 @@ const discoverUsers = async (req, res) => {
 const getProfileStats = async (req, res) => {
   const userId = req.user.userId;
   try {
-    const [userMovies, matches, ratings] = await Promise.all([
-      prisma.userMovie.findMany({ where: { userId }, include: { movie: true } }),
-      prisma.match.findMany({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
-      prisma.movieRating.findMany({ where: { userId } }),
+    const [movieCount, matchCount, ratings, topMovies] = await Promise.all([
+      prisma.userMovie.count({ where: { userId } }),
+      prisma.match.count({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
+      prisma.movieRating.findMany({ where: { userId }, select: { rating: true } }),
+      prisma.userMovie.findMany({
+        where: { userId },
+        select: { movie: { select: { title: true, poster: true, tmdbId: true, year: true } } },
+        orderBy: { movie: { id: 'desc' } },
+        take: 4,
+      }),
     ]);
 
-    // Favori türler — film başlıklarından TMDB tür verisi yok, ratings'ten hesaplayabiliriz
-    // Şimdilik movie yıllarından era hesaplayalım
-    const movieCount = userMovies.length;
-    const matchCount = matches.length;
-
-    // Ortalama puan
     const avgRating = ratings.length > 0
       ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
       : null;
 
-    // Favori era (filmlerin yıllarına göre)
+    // Favori era için ayrı sorgu — sadece year alanı
+    const movieYears = await prisma.userMovie.findMany({
+      where: { userId },
+      select: { movie: { select: { year: true } } },
+    });
     const eraCounts = {};
-    for (const um of userMovies) {
+    for (const um of movieYears) {
       if (um.movie.year) {
         const decade = Math.floor(um.movie.year / 10) * 10;
         eraCounts[decade] = (eraCounts[decade] || 0) + 1;
@@ -154,20 +175,20 @@ const getProfileStats = async (req, res) => {
       ? Object.entries(eraCounts).sort((a, b) => b[1] - a[1])[0][0] + 's'
       : null;
 
-    // Top filmler (en son eklenen 4)
-    const topMovies = userMovies
-      .slice(-4)
-      .reverse()
-      .map((um) => ({ title: um.movie.title, poster: um.movie.poster, tmdbId: um.movie.tmdbId }));
-
-    // Watch style
     let watchStyle = null;
     if (movieCount >= 50) watchStyle = { label: 'Sinefil', emoji: '🎩' };
     else if (movieCount >= 20) watchStyle = { label: 'Binge Watcher', emoji: '🍿' };
     else if (movieCount >= 10) watchStyle = { label: 'Film Sever', emoji: '🎬' };
     else if (movieCount >= 1) watchStyle = { label: 'Başlangıç', emoji: '🌱' };
 
-    res.json({ movieCount, matchCount, avgRating, favoriteEra, topMovies, watchStyle });
+    res.json({
+      movieCount,
+      matchCount,
+      avgRating,
+      favoriteEra,
+      topMovies: topMovies.map((um) => um.movie),
+      watchStyle,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Stats alinamadi' });

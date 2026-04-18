@@ -77,6 +77,11 @@ export default function DrawerMenu({ visible, onClose }) {
           <Text style={styles.menuText}>Profili Düzenle</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigate('MyProfile')}>
+          <Text style={styles.menuIcon}>👤</Text>
+          <Text style={styles.menuText}>Profilim</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigate('Watchlist')}>
           <Text style={styles.menuIcon}>📋</Text>
           <Text style={styles.menuText}>Daha Sonra İzle</Text>
