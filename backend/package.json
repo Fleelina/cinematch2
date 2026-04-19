@@ -1,10 +1,10 @@
 {
   "name": "cinematch-backend",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "server.js",
   "scripts": {
-    "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "dev": "nodemon server.js",
+    "start": "node server.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.0.0",
@@ -12,7 +12,6 @@
     "@vitalets/google-translate-api": "^9.2.1",
     "axios": "^1.14.0",
     "bcrypt": "^6.0.0",
-    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",
     "express": "^4.18.0",

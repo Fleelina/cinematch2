@@ -10,6 +10,7 @@ router.get('/check-username', userController.checkUsername);
 router.get('/profile', authMiddleware, userController.getProfile);
 router.put('/profile', authMiddleware, userController.updateProfile);
 router.get('/profile/stats', authMiddleware, userController.getProfileStats);
+router.post('/push-token', authMiddleware, userController.savePushToken);
 router.get('/characters/search', authMiddleware, userController.searchCharacters);
 router.get('/discover', authMiddleware, userController.discoverUsers);
 router.get('/:userId/profile', authMiddleware, userController.getUserProfile);

@@ -216,7 +216,7 @@ const getMovieDetail = async (req, res) => {
     const [movieInDb, watchlistItem] = await Promise.all([
       prisma.movie.findUnique({
         where: { tmdbId: tmdbIdInt },
-        include: { users: { select: { userId: true } }, ratings: true },
+        include: { users: { select: { userId: true } } },
       }),
       prisma.watchlist.findUnique({
         where: { userId_tmdbId: { userId, tmdbId: tmdbIdInt } },
@@ -232,12 +232,31 @@ const getMovieDetail = async (req, res) => {
     let userRating = null;
     let ratingCount = 0;
 
-    if (movieInDb && movieInDb.ratings.length > 0) {
-      ratingCount = movieInDb.ratings.length;
-      const avg = movieInDb.ratings.reduce((sum, r) => sum + r.rating, 0) / ratingCount;
-      cinematchRating = Math.round(avg * 10) / 10;
-      const myRating = movieInDb.ratings.find((r) => r.userId === userId);
-      userRating = myRating ? myRating.rating : null;
+    if (movieInDb) {
+      // Cache'den stats al ya da hesapla
+      const cacheKey = `movie:stats:${movieInDb.id}`;
+      let ratingStats = cache.get(cacheKey);
+      
+      if (!ratingStats) {
+        ratingStats = await prisma.movieRating.aggregate({
+          where: { movieId: movieInDb.id },
+          _avg: { rating: true },
+          _count: true,
+        });
+        cache.set(cacheKey, ratingStats, 30);
+      }
+
+      if (ratingStats._count > 0) {
+        ratingCount = ratingStats._count;
+        cinematchRating = ratingStats._avg.rating ? Math.round(ratingStats._avg.rating * 10) / 10 : null;
+      }
+
+      // Kullanıcının puanını bul
+      const userRatingRecord = await prisma.movieRating.findUnique({
+        where: { userId_movieId: { userId, movieId: movieInDb.id } },
+        select: { rating: true },
+      });
+      userRating = userRatingRecord ? userRatingRecord.rating : null;
     }
 
     res.json({ ...tmdbData, addedByCount, isAdded, isInWatchlist, cinematchRating, userRating, ratingCount });
@@ -258,20 +277,57 @@ const rateMovie = async (req, res) => {
   }
 
   try {
-    const movie = await prisma.movie.findUnique({ where: { tmdbId: parseInt(tmdbId) } });
-    if (!movie) return res.status(404).json({ error: 'Film once profiline eklenmelidir' });
-
-    await prisma.movieRating.upsert({
-      where: { userId_movieId: { userId, movieId: movie.id } },
-      update: { rating },
-      create: { userId, movieId: movie.id, rating },
+    // Tek sorguda hem izleyip izlemediğini kontrol et hem movieId'yi al
+    // UserMovie tablosundan bak — film profilinde varsa userMovie kaydı var
+    const userMovie = await prisma.userMovie.findFirst({
+      where: {
+        userId,
+        movie: { tmdbId: parseInt(tmdbId) },
+      },
+      select: { movieId: true },
     });
 
-    const ratings = await prisma.movieRating.findMany({ where: { movieId: movie.id } });
-    const avg = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
-    const cinematchRating = Math.round(avg * 10) / 10;
+    if (!userMovie) {
+      return res.status(404).json({ error: 'Film once profiline eklenmelidir' });
+    }
 
-    res.json({ message: 'Puan kaydedildi', cinematchRating, ratingCount: ratings.length, userRating: rating });
+    const { movieId } = userMovie;
+
+    // Puan kaydet
+    await prisma.movieRating.upsert({
+      where: { userId_movieId: { userId, movieId } },
+      update: { rating },
+      create: { userId, movieId, rating },
+    });
+
+    // Cache'den stats al
+    const cacheKey = `movie:stats:${movieId}`;
+    let stats = cache.get(cacheKey);
+    if (!stats) {
+      stats = { _count: null, _avg: { rating: null } };
+    }
+
+    const cinematchRating = stats._avg?.rating
+      ? Math.round(stats._avg.rating * 10) / 10
+      : null;
+
+    // Anında cevap dön
+    res.json({
+      message: 'Puan kaydedildi',
+      cinematchRating,
+      ratingCount: stats._count,
+      userRating: rating,
+    });
+
+    // Arka planda aggregate güncelle
+    prisma.movieRating.aggregate({
+      where: { movieId },
+      _avg: { rating: true },
+      _count: true,
+    }).then((newStats) => {
+      cache.set(cacheKey, newStats, 30);
+    }).catch(() => {});
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Sunucu hatasi' });

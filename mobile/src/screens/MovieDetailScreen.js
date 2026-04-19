@@ -102,16 +102,36 @@ export default function MovieDetailScreen({ route, navigation }) {
       Alert.alert('Uyarı', 'Puan vermek için önce filmi profiline ekle!');
       return;
     }
+    
+    // Optimistic update: UI'ı hemen güncelle
+    const previousRating = movie.userRating;
+    const previousCinematchRating = movie.cinematchRating;
+    const previousRatingCount = movie.ratingCount;
+    
+    setMovie(prev => ({
+      ...prev,
+      userRating: score,
+    }));
+    
+    // Spinner kısa göster
     setRatingLoading(true);
+    
     try {
       const res = await api.post(`/movies/rate/${tmdbId}`, { rating: score });
+      // Server cevabı ile güncelle
       setMovie(prev => ({
         ...prev,
-        userRating: res.data.userRating,
         cinematchRating: res.data.cinematchRating,
         ratingCount: res.data.ratingCount,
       }));
     } catch (err) {
+      // Hata olursa geri al
+      setMovie(prev => ({
+        ...prev,
+        userRating: previousRating,
+        cinematchRating: previousCinematchRating,
+        ratingCount: previousRatingCount,
+      }));
       Alert.alert('Hata', err.response?.data?.error || 'Puan verilemedi');
     } finally {
       setRatingLoading(false);
