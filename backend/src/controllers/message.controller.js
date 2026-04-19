@@ -1,4 +1,5 @@
 const prisma = require('../prisma');
+const { sendPushNotification } = require('../services/notification.service');
 
 // Kullanıcının tüm match konuşmalarını son mesajla birlikte getir
 const getConversations = async (req, res) => {
@@ -107,12 +108,28 @@ const sendMessage = async (req, res) => {
     if (!match) return res.status(404).json({ error: 'Konuşma bulunamadı' });
 
     const message = await prisma.message.create({
-      data: {
-        matchId,
-        senderId: userId,
-        text: text.trim(),
-      },
+      data: { matchId, senderId: userId, text: text.trim() },
     });
+
+    // Karşı tarafın push token'ını al ve bildirim gönder
+    const otherUserId = match.user1Id === userId ? match.user2Id : match.user1Id;
+    const otherUser = await prisma.user.findUnique({
+      where: { id: otherUserId },
+      select: { pushToken: true, name: true },
+    });
+    const sender = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
+    if (otherUser?.pushToken) {
+      sendPushNotification(
+        otherUser.pushToken,
+        sender.name,
+        text.trim(),
+        { screen: 'Chat', matchId }
+      );
+    }
 
     res.json(message);
   } catch (err) {

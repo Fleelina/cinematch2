@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
     loadToken();
   }, []);
 
-  // user degisince AsyncStorage'i guncelle
+  // user değişince AsyncStorage'i güncelle
   useEffect(() => {
     if (user) {
       AsyncStorage.setItem('user', JSON.stringify(user));
@@ -60,7 +60,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, setUser, token, setToken, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

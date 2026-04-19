@@ -1,4 +1,5 @@
 const prisma = require('../prisma');
+const { sendPushNotification } = require('../services/notification.service');
 
 const likeUser = async (req, res) => {
   const fromUserId = req.user.userId;
@@ -29,6 +30,29 @@ const likeUser = async (req, res) => {
         await prisma.match.create({
           data: { user1Id: fromUserId, user2Id: toUserId },
         });
+
+        // Her iki kullanıcıya eşleşme bildirimi gönder
+        const [fromUser, toUser] = await Promise.all([
+          prisma.user.findUnique({ where: { id: fromUserId }, select: { name: true, pushToken: true } }),
+          prisma.user.findUnique({ where: { id: toUserId }, select: { name: true, pushToken: true } }),
+        ]);
+
+        if (toUser?.pushToken) {
+          sendPushNotification(
+            toUser.pushToken,
+            '❤️ Yeni Eşleşme!',
+            `${fromUser.name} ile eşleştin! Ortak film zevkiniz var.`,
+            { screen: 'Mesajlar' }
+          );
+        }
+        if (fromUser?.pushToken) {
+          sendPushNotification(
+            fromUser.pushToken,
+            '❤️ Yeni Eşleşme!',
+            `${toUser.name} ile eşleştin! Ortak film zevkiniz var.`,
+            { screen: 'Mesajlar' }
+          );
+        }
       }
 
       return res.json({ matched: true, message: 'Eşleştiniz! 🎉' });

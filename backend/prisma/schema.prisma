@@ -19,6 +19,7 @@ model User {
   avatarType  String?
   age         Int?
   showAge     Boolean  @default(false)
+  pushToken   String?  // Expo push notification token
   createdAt   DateTime @default(now())
 
   movies            UserMovie[]

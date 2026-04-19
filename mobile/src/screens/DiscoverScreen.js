@@ -236,8 +236,8 @@ function UserCardContent({ user, compact = false }) {
       {!compact && user.movies?.length > 0 && (
         <View style={styles.moviesWrap}>
           <Text style={styles.moviesLabel}>İzledikleri</Text>
-          {user.movies.slice(0, 3).map((m) => (
-            <Text key={m.id} style={styles.movieItem}>🎬 {m.movie.title}</Text>
+          {user.movies.slice(0, 3).map((m, idx) => (
+            <Text key={`movie-${m.movieId}-${idx}`} style={styles.movieItem}>🎬 {m.movie?.title}</Text>
           ))}
         </View>
       )}

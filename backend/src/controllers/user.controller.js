@@ -54,6 +54,19 @@ const updateProfile = async (req, res) => {
   }
 };
 
+const checkUsername = async (req, res) => {
+  const { username } = req.query;
+  if (!username || username.length < 3) {
+    return res.status(400).json({ available: false, error: 'En az 3 karakter olmali' });
+  }
+  try {
+    const existing = await prisma.user.findFirst({ where: { username } });
+    res.json({ available: !existing });
+  } catch (err) {
+    res.status(500).json({ available: false });
+  }
+};
+
 const searchCharacters = async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'Arama terimi gerekli' });
@@ -90,7 +103,6 @@ const discoverUsers = async (req, res) => {
   const DISLIKE_COOLDOWN_HOURS = 24;
 
   try {
-    // Dışlanacak ID'leri tek sorguda al
     const cooldownDate = new Date(Date.now() - DISLIKE_COOLDOWN_HOURS * 60 * 60 * 1000);
     const [likes, recentDislikes, myMovies] = await Promise.all([
       prisma.interaction.findMany({
@@ -116,7 +128,6 @@ const discoverUsers = async (req, res) => {
     const myMovieIds = myMovies.map((m) => m.movieId);
     const myMovieCount = myMovieIds.length;
 
-    // Kullanıcıları sadece gerekli alanlarla çek — movie içeriği dahil ama sadece ilk 5
     const others = await prisma.user.findMany({
       where: { id: { notIn: excludedIds } },
       select: {
@@ -125,7 +136,7 @@ const discoverUsers = async (req, res) => {
         age: true, showAge: true,
         movies: {
           select: { movieId: true, movie: { select: { id: true, title: true, poster: true, tmdbId: true } } },
-          take: 20, // her kullanicidan max 20 film çek
+          take: 20,
         },
       },
     });
@@ -135,11 +146,7 @@ const discoverUsers = async (req, res) => {
       const commonCount = theirMovieIds.filter((id) => myMovieIds.includes(id)).length;
       const score = myMovieCount > 0 ? (commonCount / myMovieCount) * 100 : 0;
       if (!user.showAge) user.age = null;
-      return {
-        ...user,
-        matchScore: Math.round(score),
-        commonMovies: commonCount,
-      };
+      return { ...user, matchScore: Math.round(score), commonMovies: commonCount };
     });
 
     scored.sort((a, b) => b.matchScore - a.matchScore);
@@ -264,6 +271,6 @@ const getUserStats = async (req, res) => {
 };
 
 module.exports = {
-  getProfile, updateProfile, searchCharacters, discoverUsers,
+  getProfile, updateProfile, checkUsername, searchCharacters, discoverUsers,
   getProfileStats, getUserProfile, getUserStats,
 };
