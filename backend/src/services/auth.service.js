@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
+const { ApiError } = require('../middleware/errorHandler');
 
 const SALT_ROUNDS = 12;
 const TOKEN_EXPIRY = '7d';
@@ -75,7 +76,34 @@ const formatUserResponse = (user) => ({
   bio: user.bio,
 });
 
+const register = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies }) => {
+  const existingEmail = await findUserByEmail(email);
+  if (existingEmail) throw new ApiError(409, 'Bu email zaten kayıtlı');
+
+  if (username) {
+    const existingUsername = await findUserByUsername(username);
+    if (existingUsername) throw new ApiError(409, 'Bu kullanıcı adı zaten alınmış');
+  }
+
+  const user = await createUserWithMovies({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies });
+  const token = generateToken(user.id);
+  return { token, user: formatUserResponse(user) };
+};
+
+const login = async ({ email, password }) => {
+  const user = await findUserByEmail(email);
+  if (!user) throw new ApiError(401, 'Kullanıcı bulunamadı');
+
+  const isValid = await comparePassword(password, user.password);
+  if (!isValid) throw new ApiError(401, 'Şifre hatalı');
+
+  const token = generateToken(user.id);
+  return { token, user: formatUserResponse(user) };
+};
+
 module.exports = {
+  register,
+  login,
   findUserByEmail,
   findUserByUsername,
   hashPassword,

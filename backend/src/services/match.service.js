@@ -1,4 +1,5 @@
 const prisma = require('../prisma');
+const { sendPushNotification } = require('./notification.service');
 
 const upsertInteraction = (fromUserId, toUserId, type) =>
   prisma.interaction.upsert({
@@ -47,7 +48,38 @@ const getMatches = async (userId) => {
   }));
 };
 
+const likeUser = async (fromUserId, toUserId) => {
+  await upsertInteraction(fromUserId, toUserId, 'LIKE');
+
+  const mutual = await findMutualLike(fromUserId, toUserId);
+  if (!mutual) return { matched: false };
+
+  const existing = await findExistingMatch(fromUserId, toUserId);
+  if (!existing) {
+    await createMatch(fromUserId, toUserId);
+
+    const [fromUser, toUser] = await getUsersForNotification(fromUserId, toUserId);
+
+    if (toUser?.pushToken) {
+      sendPushNotification(toUser.pushToken, '❤️ Yeni Eşleşme!',
+        `${fromUser.name} ile eşleştin! Ortak film zevkiniz var.`, { screen: 'Mesajlar' });
+    }
+    if (fromUser?.pushToken) {
+      sendPushNotification(fromUser.pushToken, '❤️ Yeni Eşleşme!',
+        `${toUser.name} ile eşleştin! Ortak film zevkiniz var.`, { screen: 'Mesajlar' });
+    }
+  }
+
+  return { matched: true };
+};
+
+const dislikeUser = (fromUserId, toUserId) =>
+  upsertInteraction(fromUserId, toUserId, 'DISLIKE');
+
 module.exports = {
+  likeUser,
+  dislikeUser,
+  getMatches,
   upsertInteraction,
   findMutualLike,
   findExistingMatch,

@@ -1,4 +1,6 @@
 const prisma = require('../prisma');
+const { ApiError } = require('../middleware/errorHandler');
+const { sendPushNotification } = require('./notification.service');
 
 const getConversations = async (userId) => {
   const matches = await prisma.match.findMany({
@@ -70,8 +72,38 @@ const getOtherUserWithToken = (match, userId) => {
 const getSenderName = (userId) =>
   prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
 
+const fetchMessages = async (matchId, userId) => {
+  const match = await findMatchForUser(matchId, userId);
+  if (!match) throw new ApiError(404, 'Konuşma bulunamadı');
+
+  const messages = await getMessages(matchId);
+  const other = match.user1Id === userId ? match.user2 : match.user1;
+  return { messages, other };
+};
+
+const sendMessage = async (matchId, userId, text) => {
+  const match = await findMatchById(matchId, userId);
+  if (!match) throw new ApiError(404, 'Konuşma bulunamadı');
+
+  const message = await createMessage(matchId, userId, text);
+
+  // Bildirim fire & forget
+  Promise.all([
+    getOtherUserWithToken(match, userId),
+    getSenderName(userId),
+  ]).then(([otherUser, sender]) => {
+    if (otherUser?.pushToken) {
+      sendPushNotification(otherUser.pushToken, sender.name, text, { screen: 'Chat', matchId });
+    }
+  }).catch(() => {});
+
+  return message;
+};
+
 module.exports = {
   getConversations,
+  fetchMessages,
+  sendMessage,
   findMatchForUser,
   findMatchById,
   getMessages,

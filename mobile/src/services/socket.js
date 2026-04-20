@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SOCKET_URL = 'https://gibbed-triploblastic-nannie.ngrok-free.dev'; // ngrok URL (api.js ile aynı base)
+const SOCKET_URL = 'http://10.0.2.2:3000';
 
 let socket = null;
 

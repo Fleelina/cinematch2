@@ -1,8 +1,6 @@
 const prisma = require('../prisma');
-const axios = require('axios');
 const cache = require('./cache');
-
-const TMDB_BASE = 'https://api.themoviedb.org/3';
+const { ApiError } = require('../middleware/errorHandler');
 const DISLIKE_COOLDOWN_HOURS = 24;
 
 const getProfile = (userId) =>
@@ -28,29 +26,6 @@ const savePushToken = (userId, token) =>
   prisma.user.update({ where: { id: userId }, data: { pushToken: token } });
 
 const stripPassword = ({ password, ...user }) => user;
-
-const searchCharactersFromTmdb = async (query) => {
-  const cacheKey = `characters:${query.toLowerCase().trim()}`;
-  const cached = cache.get(cacheKey);
-  if (cached) return cached;
-
-  const res = await axios.get(`${TMDB_BASE}/search/person`, {
-    params: { api_key: process.env.TMDB_API_KEY, query, language: 'tr-TR' },
-  });
-
-  const people = res.data.results
-    .filter((p) => p.profile_path)
-    .slice(0, 20)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      photo: `https://image.tmdb.org/t/p/w300${p.profile_path}`,
-      knownFor: p.known_for?.map((k) => k.title || k.name).filter(Boolean).slice(0, 2).join(', '),
-    }));
-
-  cache.set(cacheKey, people, 600);
-  return people;
-};
 
 const discoverUsers = async (userId) => {
   const cooldownDate = new Date(Date.now() - DISLIKE_COOLDOWN_HOURS * 60 * 60 * 1000);
@@ -168,14 +143,47 @@ const getPublicStats = async (userId) => {
   };
 };
 
+const fetchProfile = async (userId) => {
+  const user = await getProfile(userId);
+  if (!user) throw new ApiError(404, 'Kullanıcı bulunamadı');
+  return stripPassword(user);
+};
+
+const updateProfile = async (userId, { name, username, bio, avatar, avatarType, age, showAge }) => {
+  if (username) {
+    const taken = await isUsernameTaken(username, userId);
+    if (taken) throw new ApiError(409, 'Bu kullanıcı adı zaten alınmış');
+  }
+
+  const updated = await updateUser(userId, {
+    ...(name !== undefined && { name }),
+    ...(username !== undefined && { username }),
+    ...(bio !== undefined && { bio }),
+    ...(avatar !== undefined && { avatar }),
+    ...(avatarType !== undefined && { avatarType }),
+    ...(age !== undefined && { age: age ? parseInt(age) : null }),
+    ...(showAge !== undefined && { showAge }),
+  });
+
+  return stripPassword(updated);
+};
+
+const fetchPublicProfile = async (userId) => {
+  const user = await getPublicProfile(userId);
+  if (!user) throw new ApiError(404, 'Kullanıcı bulunamadı');
+  return user;
+};
+
 module.exports = {
+  fetchProfile,
+  updateProfile,
+  fetchPublicProfile,
   getProfile,
   isUsernameTaken,
   isUsernameAvailable,
   updateUser,
   savePushToken,
   stripPassword,
-  searchCharactersFromTmdb,
   discoverUsers,
   getProfileStats,
   getPublicProfile,

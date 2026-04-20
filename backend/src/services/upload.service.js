@@ -1,4 +1,5 @@
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { ApiError } = require('../middleware/errorHandler');
 
 const r2 = new S3Client({
   region: 'auto',
@@ -16,9 +17,7 @@ const uploadToR2 = async (base64, mimeType, folder, identifier) => {
   const buffer = Buffer.from(base64Data, 'base64');
 
   if (buffer.length > MAX_SIZE_BYTES) {
-    const err = new Error('Görsel 5MB\'dan büyük olamaz');
-    err.code = 'TOO_LARGE';
-    throw err;
+    throw new ApiError(400, 'Görsel 5MB\'dan büyük olamaz');
   }
 
   const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
