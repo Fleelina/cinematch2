@@ -1,5 +1,5 @@
 const prisma = require('../prisma');
-const cache = require('./cache');
+const cache = require('../utils/cache');
 const tmdbService = require('./tmdb.service');
 const { ApiError } = require('../middleware/errorHandler');
 
@@ -200,13 +200,12 @@ const rateMovie = async (userId, tmdbId, rating) => {
 };
 
 const addToProfile = async (userId, { tmdbId, title, poster, year }) => {
-  let movie = await prisma.movie.findUnique({ where: { tmdbId } });
-
-  if (!movie) {
-    movie = await prisma.movie.create({
-      data: { tmdbId, title, poster, year: year ? parseInt(year, 10) : null },
-    });
-  }
+  const tmdbIdInt = parseInt(tmdbId, 10);
+  const movie = await prisma.movie.upsert({
+    where: { tmdbId: tmdbIdInt },
+    update: {},
+    create: { tmdbId: tmdbIdInt, title, poster, year: year ? parseInt(year, 10) : null },
+  });
 
   await prisma.userMovie.upsert({
     where: { userId_movieId: { userId, movieId: movie.id } },
@@ -219,13 +218,13 @@ const addToProfile = async (userId, { tmdbId, title, poster, year }) => {
 };
 
 const removeFromProfile = async (userId, movieId) => {
-  const movieIdInt = parseInt(movieId, 10);
-
-  await prisma.userMovie.deleteMany({
-    where: { userId, movieId: movieIdInt },
+  const deleted = await prisma.userMovie.deleteMany({
+    where: { userId, movieId },
   });
 
-  return prisma.userMovie.count({ where: { movieId: movieIdInt } });
+  if (deleted.count === 0) throw new ApiError(404, 'Film profilinde bulunamadı');
+
+  return { success: true };
 };
 
 const removeFromProfileByTmdbId = async (userId, tmdbId) => {
@@ -253,10 +252,6 @@ const searchMovies = async (query) => tmdbService.searchMovies(query);
 
 const translateText = async (text) => tmdbService.translateText(text);
 
-const getPersonDetail = async (personId) => tmdbService.getPersonDetail(personId);
-
-const searchPeople = async (query) => tmdbService.searchPeople(query);
-
 const getWatchlist = (userId) =>
   prisma.watchlist.findMany({
     where: { userId },
@@ -278,8 +273,6 @@ const removeFromWatchlist = (userId, tmdbId) =>
 module.exports = {
   searchMovies,
   translateText,
-  getPersonDetail,
-  searchPeople,
   getSuggestions,
   getMovieDetailWithUserData,
   rateMovie,

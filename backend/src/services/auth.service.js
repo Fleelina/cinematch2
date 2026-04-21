@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
 const { ApiError } = require('../middleware/errorHandler');
+const { finalizeAvatar } = require('./upload.service');
 
 const SALT_ROUNDS = 12;
 const TOKEN_EXPIRY = '7d';
@@ -10,7 +11,7 @@ const findUserByEmail = (email) =>
   prisma.user.findUnique({ where: { email } });
 
 const findUserByUsername = (username) =>
-  prisma.user.findFirst({ where: { username } });
+  prisma.user.findUnique({ where: { username } });
 
 const hashPassword = (password) =>
   bcrypt.hash(password, SALT_ROUNDS);
@@ -18,18 +19,20 @@ const hashPassword = (password) =>
 const comparePassword = (plain, hashed) =>
   bcrypt.compare(plain, hashed);
 
-const generateToken = (userId) =>
-  jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+const generateToken = (userId) => {
+  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET not set');
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+};
 
 const createUserWithMovies = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies }) => {
   const hashedPassword = await hashPassword(password);
 
-  // Filmleri DB'de upsert et
+  // Filmleri DB'de paralel upsert et
   const movieData = [];
   if (Array.isArray(movies) && movies.length > 0) {
-    for (const movie of movies) {
-      try {
-        const dbMovie = await prisma.movie.upsert({
+    const results = await Promise.allSettled(
+      movies.map((movie) =>
+        prisma.movie.upsert({
           where: { tmdbId: movie.tmdbId },
           update: {},
           create: {
@@ -38,12 +41,17 @@ const createUserWithMovies = async ({ name, email, password, username, bio, avat
             poster: movie.poster || null,
             year: movie.year ? parseInt(movie.year) : null,
           },
-        });
-        movieData.push({ movieId: dbMovie.id });
-      } catch (err) {
-        console.error(`Film upsert hatası (tmdbId: ${movie.tmdbId}):`, err.message);
+        })
+      )
+    );
+
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        movieData.push({ movieId: result.value.id });
+      } else {
+        console.error(`Film upsert hatası (tmdbId: ${movies[i].tmdbId}):`, result.reason.message);
       }
-    }
+    });
   }
 
   return prisma.user.create({
@@ -87,15 +95,25 @@ const register = async ({ name, email, password, username, bio, avatar, avatarTy
 
   const user = await createUserWithMovies({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies });
   const token = generateToken(user.id);
+
+  // temp avatar varsa finalize et
+  if (avatar && avatarType === 'upload') {
+    const finalUrl = await finalizeAvatar(avatar, user.id);
+    if (finalUrl !== avatar) {
+      await prisma.user.update({ where: { id: user.id }, data: { avatar: finalUrl } });
+      user.avatar = finalUrl;
+    }
+  }
+
   return { token, user: formatUserResponse(user) };
 };
 
 const login = async ({ email, password }) => {
   const user = await findUserByEmail(email);
-  if (!user) throw new ApiError(401, 'Kullanıcı bulunamadı');
+  if (!user) throw new ApiError(401, 'Email veya şifre hatalı');
 
   const isValid = await comparePassword(password, user.password);
-  if (!isValid) throw new ApiError(401, 'Şifre hatalı');
+  if (!isValid) throw new ApiError(401, 'Email veya şifre hatalı');
 
   const token = generateToken(user.id);
   return { token, user: formatUserResponse(user) };

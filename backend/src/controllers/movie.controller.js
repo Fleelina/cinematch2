@@ -34,8 +34,8 @@ const addMovieToProfile = asyncHandler(async (req, res) => {
 
 const removeMovieFromProfile = asyncHandler(async (req, res) => {
   const { movieId } = req.validated.params;
-  const addedByCount = await movieService.removeFromProfile(req.user.userId, movieId);
-  ok(res, { addedByCount });
+  await movieService.removeFromProfile(req.user.userId, movieId);
+  ok(res, null);
 });
 
 const removeMovieByTmdbId = asyncHandler(async (req, res) => {

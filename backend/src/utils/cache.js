@@ -24,4 +24,12 @@ const del = (key) => cache.delete(key);
 
 const clear = () => cache.clear();
 
+// Expired item'ları periyodik temizle (memory leak önlemi)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, item] of cache.entries()) {
+    if (now > item.expiresAt) cache.delete(key);
+  }
+}, 60_000);
+
 module.exports = { get, set, del, clear };

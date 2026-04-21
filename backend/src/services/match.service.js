@@ -13,18 +13,18 @@ const findMutualLike = (fromUserId, toUserId) =>
     where: { fromUserId: toUserId, toUserId: fromUserId, type: 'LIKE' },
   });
 
-const findExistingMatch = (user1Id, user2Id) =>
-  prisma.match.findFirst({
-    where: {
-      OR: [
-        { user1Id, user2Id },
-        { user1Id: user2Id, user2Id: user1Id },
-      ],
-    },
-  });
+// (A,B) ve (B,A) aynı unique key'e map'lensin diye küçük olan önce
+const normalizeMatchIds = (id1, id2) =>
+  id1 < id2 ? { user1Id: id1, user2Id: id2 } : { user1Id: id2, user2Id: id1 };
 
-const createMatch = (user1Id, user2Id) =>
-  prisma.match.create({ data: { user1Id, user2Id } });
+const upsertMatch = (fromUserId, toUserId) => {
+  const { user1Id, user2Id } = normalizeMatchIds(fromUserId, toUserId);
+  return prisma.match.upsert({
+    where: { user1Id_user2Id: { user1Id, user2Id } },
+    update: {},
+    create: { user1Id, user2Id },
+  });
+};
 
 const getUsersForNotification = (id1, id2) =>
   Promise.all([
@@ -48,18 +48,9 @@ const getMatches = async (userId) => {
   }));
 };
 
-const likeUser = async (fromUserId, toUserId) => {
-  await upsertInteraction(fromUserId, toUserId, 'LIKE');
-
-  const mutual = await findMutualLike(fromUserId, toUserId);
-  if (!mutual) return { matched: false };
-
-  const existing = await findExistingMatch(fromUserId, toUserId);
-  if (!existing) {
-    await createMatch(fromUserId, toUserId);
-
+const sendMatchNotifications = async (fromUserId, toUserId) => {
+  try {
     const [fromUser, toUser] = await getUsersForNotification(fromUserId, toUserId);
-
     if (toUser?.pushToken) {
       sendPushNotification(toUser.pushToken, '❤️ Yeni Eşleşme!',
         `${fromUser.name} ile eşleştin! Ortak film zevkiniz var.`, { screen: 'Mesajlar' });
@@ -68,7 +59,22 @@ const likeUser = async (fromUserId, toUserId) => {
       sendPushNotification(fromUser.pushToken, '❤️ Yeni Eşleşme!',
         `${toUser.name} ile eşleştin! Ortak film zevkiniz var.`, { screen: 'Mesajlar' });
     }
+  } catch (err) {
+    console.error('Push notification hatası:', err);
   }
+};
+
+const likeUser = async (fromUserId, toUserId) => {
+  await upsertInteraction(fromUserId, toUserId, 'LIKE');
+
+  const mutual = await findMutualLike(fromUserId, toUserId);
+  if (!mutual) return { matched: false };
+
+  // mutual doğrulandı — idempotent upsert, ikinci check-then-act döngüsü yok
+  // UNIQUE constraint normalize edilmiş (A,B) key'i üzerinden DB garantisi veriyor
+  await upsertMatch(fromUserId, toUserId);
+
+  setImmediate(() => sendMatchNotifications(fromUserId, toUserId));
 
   return { matched: true };
 };
@@ -82,8 +88,7 @@ module.exports = {
   getMatches,
   upsertInteraction,
   findMutualLike,
-  findExistingMatch,
-  createMatch,
+  upsertMatch,
+  normalizeMatchIds,
   getUsersForNotification,
-  getMatches,
 };

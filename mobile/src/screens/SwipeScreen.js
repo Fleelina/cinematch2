@@ -14,12 +14,13 @@ const CARD_H = SH * 0.58;
 let prefetchedMovies = [];
 let isFetching = false;
 
-async function prefetchMovies() {
+async function prefetchMovies(onDone) {
   if (isFetching) return;
   isFetching = true;
   try {
     const res = await api.get('/movies/suggestions');
     prefetchedMovies = res.data.movies || [];
+    if (onDone) onDone();
   } catch {
     prefetchedMovies = [];
   } finally {
@@ -47,6 +48,9 @@ export default function SwipeScreen({ navigation }) {
       setCurrentIndex(0);
       position.setValue({ x: 0, y: 0 });
       prefetchMovies();
+    } else if (remaining === 0 && !isFetching) {
+      // prefetch henüz bitmedi, bitince otomatik yükle
+      prefetchMovies(() => loadMovies());
     }
   }, [currentIndex, movies.length]);
 

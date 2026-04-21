@@ -1,4 +1,5 @@
 const { getPrisma } = require('../config/database');
+const messageService = require('../services/message.service');
 
 function setupSocketHandlers(io) {
   const prisma = getPrisma();
@@ -12,7 +13,7 @@ function setupSocketHandlers(io) {
 
     // Event handlers
     socket.on('join_room', (data) => handleJoinRoom(data, socket));
-    socket.on('send_message', (data) => handleSendMessage(data, socket, io, prisma));
+    socket.on('send_message', (data) => handleSendMessage(data, socket, io));
     socket.on('typing', (data) => handleTyping(data, socket));
     socket.on('stop_typing', (data) => handleStopTyping(data, socket));
     socket.on('disconnect', () => handleDisconnect(userId));
@@ -36,19 +37,11 @@ function handleJoinRoom({ matchId }, socket) {
   socket.join(`match:${matchId}`);
 }
 
-async function handleSendMessage({ matchId, text }, socket, io, prisma) {
+async function handleSendMessage({ matchId, text }, socket, io) {
   if (!text || !text.trim()) return;
 
   try {
-    const match = await prisma.match.findFirst({
-      where: { id: matchId, OR: [{ user1Id: socket.userId }, { user2Id: socket.userId }] },
-    });
-    if (!match) return;
-
-    const message = await prisma.message.create({
-      data: { matchId, senderId: socket.userId, text: text.trim() },
-    });
-
+    const message = await messageService.sendMessage(matchId, socket.userId, text.trim());
     io.to(`match:${matchId}`).emit('new_message', message);
   } catch (err) {
     console.error('Mesaj hatası:', err);

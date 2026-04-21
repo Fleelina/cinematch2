@@ -1,8 +1,13 @@
 const axios = require('axios');
-const cache = require('./cache');
+const cache = require('../utils/cache');
 const { translate } = require('@vitalets/google-translate-api/dist/cjs/index.js');
 
-const TMDB_BASE = 'https://api.themoviedb.org/3';
+const tmdbClient = axios.create({
+  baseURL: 'https://api.themoviedb.org/3',
+  headers: { Authorization: `Bearer ${process.env.TMDB_READ_ACCESS_TOKEN}` },
+  params: { language: 'en-US' },
+  timeout: 10000,
+});
 
 const searchMovies = async (query) => {
   const normalizedQuery = query.toLowerCase().trim();
@@ -10,13 +15,13 @@ const searchMovies = async (query) => {
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const response = await axios.get(`${TMDB_BASE}/search/movie`, {
-    params: { api_key: process.env.TMDB_API_KEY, query, language: 'en-US' },
+  const response = await tmdbClient.get('/search/movie', {
+    params: { query },
   });
 
   const movies = response.data.results.map((movie) => ({
     tmdbId: movie.id,
-    title: movie.original_title || movie.title,
+    title: movie.title || movie.original_title,
     poster: movie.poster_path ? `https://image.tmdb.org/t/p/w300${movie.poster_path}` : null,
     year: movie.release_date?.slice(0, 4),
   }));
@@ -25,13 +30,25 @@ const searchMovies = async (query) => {
   return movies;
 };
 
+const withRetry = async (fn, retries = 2, delay = 500) => {
+  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isLast = attempt === retries + 1;
+      const isRetryable = !err.response || err.response.status >= 500 || err.code === 'ECONNABORTED';
+      if (isLast || !isRetryable) throw err;
+      console.warn(`[TMDB] Retry ${attempt}/${retries} — ${err.message}`);
+      await new Promise((res) => setTimeout(res, delay * attempt));
+    }
+  }
+};
+
 const getCachedResults = async (cacheKey, url, extraParams = {}, ttl = 600) => {
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const response = await axios.get(url, {
-    params: { api_key: process.env.TMDB_API_KEY, language: 'en-US', ...extraParams },
-  });
+  const response = await withRetry(() => tmdbClient.get(url, { params: { ...extraParams } }));
 
   const results = response.data.results || [];
   cache.set(cacheKey, results, ttl);
@@ -43,14 +60,12 @@ const getMovieDetail = async (tmdbId) => {
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const [detailRes, creditsRes] = await Promise.all([
-    axios.get(`${TMDB_BASE}/movie/${tmdbId}`, {
-      params: { api_key: process.env.TMDB_API_KEY, language: 'en-US' },
-    }),
-    axios.get(`${TMDB_BASE}/movie/${tmdbId}/credits`, {
-      params: { api_key: process.env.TMDB_API_KEY, language: 'en-US' },
-    }),
-  ]);
+  const [detailRes, creditsRes] = await withRetry(() =>
+    Promise.all([
+      tmdbClient.get(`/movie/${tmdbId}`),
+      tmdbClient.get(`/movie/${tmdbId}/credits`),
+    ])
+  );
 
   const movie = detailRes.data;
   const credits = creditsRes.data;
@@ -58,23 +73,23 @@ const getMovieDetail = async (tmdbId) => {
 
   const data = {
     tmdbId: movie.id,
-    title: movie.original_title || movie.title,
+    title: movie.title || movie.original_title,
     originalTitle: movie.original_title,
     overview: movie.overview,
     poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
     backdrop: movie.backdrop_path ? `https://image.tmdb.org/t/p/w780${movie.backdrop_path}` : null,
     year: movie.release_date?.slice(0, 4),
-    runtime: movie.runtime,
-    genres: movie.genres.map((genre) => genre.name),
-    rating: movie.vote_average?.toFixed(1),
-    director: director ? director.name : null,
-    directorId: director ? director.id : null,
-    cast: credits.cast.slice(0, 10).map((person) => ({
+    runtime: movie.runtime ?? null,
+    genres: movie.genres?.map((genre) => genre.name) ?? [],
+    rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
+    director: director?.name ?? null,
+    directorId: director?.id ?? null,
+    cast: credits.cast?.slice(0, 10).map((person) => ({
       personId: person.id,
       name: person.name,
       character: person.character,
       photo: person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : null,
-    })),
+    })) ?? [],
   };
 
   cache.set(cacheKey, data, 1800);
@@ -83,12 +98,12 @@ const getMovieDetail = async (tmdbId) => {
 
 const getSuggestionPools = async ({ popularPage, nowPlayingPage, topRatedPage, classicsPage }) =>
   Promise.all([
-    getCachedResults(`popular:${popularPage}`, `${TMDB_BASE}/movie/popular`, { page: popularPage }, 600),
-    getCachedResults(`now_playing:${nowPlayingPage}`, `${TMDB_BASE}/movie/now_playing`, { page: nowPlayingPage }, 600),
-    getCachedResults(`top_rated:${topRatedPage}`, `${TMDB_BASE}/movie/top_rated`, { page: topRatedPage }, 1800),
+    getCachedResults(`popular:${popularPage}`, '/movie/popular', { page: popularPage }, 600),
+    getCachedResults(`now_playing:${nowPlayingPage}`, '/movie/now_playing', { page: nowPlayingPage }, 600),
+    getCachedResults(`top_rated:${topRatedPage}`, '/movie/top_rated', { page: topRatedPage }, 1800),
     getCachedResults(
       `classics:${classicsPage}`,
-      `${TMDB_BASE}/discover/movie`,
+      '/discover/movie',
       {
         sort_by: 'vote_average.desc',
         'primary_release_date.gte': '1970-01-01',
@@ -101,16 +116,21 @@ const getSuggestionPools = async ({ popularPage, nowPlayingPage, topRatedPage, c
   ]);
 
 const getSimilarMovies = (tmdbId, page) =>
-  getCachedResults(`similar:${tmdbId}:${page}`, `${TMDB_BASE}/movie/${tmdbId}/similar`, { page }, 900);
+  getCachedResults(`similar:${tmdbId}:${page}`, `/movie/${tmdbId}/similar`, { page }, 900);
 
 const translateText = async (text) => {
   const cacheKey = `translate:${text.slice(0, 50)}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const result = await translate(text, { to: 'tr' });
-  cache.set(cacheKey, result.text, 3600);
-  return result.text;
+  try {
+    const result = await translate(text, { to: 'tr' });
+    cache.set(cacheKey, result.text, 3600);
+    return result.text;
+  } catch (err) {
+    console.warn('[translate] hata, orijinal metin dönüyor:', err.message);
+    return text;
+  }
 };
 
 const getPersonDetail = async (personId) => {
@@ -118,25 +138,22 @@ const getPersonDetail = async (personId) => {
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const [trDetailRes, enDetailRes, creditsRes] = await Promise.all([
-    axios.get(`${TMDB_BASE}/person/${personId}`, {
-      params: { api_key: process.env.TMDB_API_KEY, language: 'tr-TR' },
-    }),
-    axios.get(`${TMDB_BASE}/person/${personId}`, {
-      params: { api_key: process.env.TMDB_API_KEY, language: 'en-US' },
-    }),
-    axios.get(`${TMDB_BASE}/person/${personId}/combined_credits`, {
-      params: { api_key: process.env.TMDB_API_KEY, language: 'tr-TR' },
-    }),
-  ]);
+  const [trDetailRes, creditsRes] = await withRetry(() =>
+    Promise.all([
+      tmdbClient.get(`/person/${personId}`, { params: { language: 'tr-TR' } }),
+      tmdbClient.get(`/person/${personId}/combined_credits`),
+    ])
+  );
 
   const p = trDetailRes.data;
-  const pEn = enDetailRes.data;
   const credits = creditsRes.data;
 
   const trBio = p.biography?.trim() || '';
-  const enBio = pEn.biography?.trim() || '';
-  const biography = trBio.length > 100 ? trBio : enBio;
+  let biography = trBio;
+  if (trBio.length <= 100) {
+    const enDetailRes = await tmdbClient.get(`/person/${personId}`);
+    biography = enDetailRes.data.biography?.trim() || trBio;
+  }
 
   const actedIn = credits.cast
     ? credits.cast
@@ -188,8 +205,8 @@ const searchPeople = async (query) => {
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const res = await axios.get(`${TMDB_BASE}/search/person`, {
-    params: { api_key: process.env.TMDB_API_KEY, query, language: 'tr-TR' },
+  const res = await tmdbClient.get('/search/person', {
+    params: { query, language: 'tr-TR' },
   });
 
   const people = res.data.results

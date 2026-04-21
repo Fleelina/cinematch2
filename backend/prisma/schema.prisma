@@ -112,6 +112,7 @@ model Match {
   user2    User      @relation("MatchUser2", fields: [user2Id], references: [id], onDelete: Cascade)
   messages Message[]
 
+  @@unique([user1Id, user2Id])
   @@index([user1Id])
   @@index([user2Id])
 }

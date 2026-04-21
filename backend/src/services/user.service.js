@@ -1,6 +1,6 @@
 const prisma = require('../prisma');
-const cache = require('./cache');
 const { ApiError } = require('../middleware/errorHandler');
+const { deleteFromR2 } = require('./upload.service');
 const DISLIKE_COOLDOWN_HOURS = 24;
 
 const getProfile = (userId) =>
@@ -38,6 +38,7 @@ const discoverUsers = async (userId) => {
 
   const excludedIds = [...new Set([userId, ...likes.map((i) => i.toUserId), ...recentDislikes.map((i) => i.toUserId)])];
   const myMovieIds = myMovies.map((m) => m.movieId);
+  const myMovieIdSet = new Set(myMovieIds);
 
   const others = await prisma.user.findMany({
     where: { id: { notIn: excludedIds } },
@@ -54,7 +55,7 @@ const discoverUsers = async (userId) => {
   return others
     .map((user) => {
       const theirMovieIds = user.movies.map((m) => m.movieId);
-      const commonCount = theirMovieIds.filter((id) => myMovieIds.includes(id)).length;
+      const commonCount = theirMovieIds.filter((id) => myMovieIdSet.has(id)).length;
       const score = myMovieIds.length > 0 ? (commonCount / myMovieIds.length) * 100 : 0;
       if (!user.showAge) user.age = null;
       return { ...user, matchScore: Math.round(score), commonMovies: commonCount };
@@ -122,13 +123,19 @@ const getPublicProfile = async (userId) => {
 };
 
 const getPublicStats = async (userId) => {
-  const [userMovies, matchCount, ratings] = await Promise.all([
-    prisma.userMovie.findMany({ where: { userId }, select: { movie: { select: { year: true, title: true, poster: true, tmdbId: true } } } }),
+  const [movieCount, matchCount, ratings, topMovies, movieYears] = await Promise.all([
+    prisma.userMovie.count({ where: { userId } }),
     prisma.match.count({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
     prisma.movieRating.findMany({ where: { userId }, select: { rating: true } }),
+    prisma.userMovie.findMany({
+      where: { userId },
+      select: { movie: { select: { title: true, poster: true, tmdbId: true, year: true } } },
+      orderBy: { movie: { id: 'desc' } },
+      take: 4,
+    }),
+    prisma.userMovie.findMany({ where: { userId }, select: { movie: { select: { year: true } } } }),
   ]);
 
-  const movieCount = userMovies.length;
   const avgRating = ratings.length > 0
     ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
     : null;
@@ -137,8 +144,8 @@ const getPublicStats = async (userId) => {
     movieCount,
     matchCount,
     avgRating,
-    favoriteEra: computeFavoriteEra(userMovies),
-    topMovies: userMovies.slice(-4).reverse().map((um) => um.movie),
+    favoriteEra: computeFavoriteEra(movieYears),
+    topMovies: topMovies.map((um) => um.movie),
     watchStyle: computeWatchStyle(movieCount),
   };
 };
@@ -153,6 +160,14 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
   if (username) {
     const taken = await isUsernameTaken(username, userId);
     if (taken) throw new ApiError(409, 'Bu kullanıcı adı zaten alınmış');
+  }
+
+  // Yeni avatar geliyorsa eski R2 dosyasını sil
+  if (avatar) {
+    const current = await prisma.user.findUnique({ where: { id: userId }, select: { avatar: true, avatarType: true } });
+    if (current?.avatar && current.avatarType === 'upload') {
+      setImmediate(() => deleteFromR2(current.avatar).catch((err) => console.error('[R2] Avatar silinemedi:', current.avatar, err)));
+    }
   }
 
   const updated = await updateUser(userId, {

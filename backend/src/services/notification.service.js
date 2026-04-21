@@ -1,18 +1,11 @@
 const axios = require('axios');
+const prisma = require('../prisma');
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
-/**
- * Expo Push Notification gönder
- * @param {string|string[]} tokens - Expo push token(lar)
- * @param {string} title - Bildirim başlığı
- * @param {string} body - Bildirim içeriği
- * @param {object} data - Ek veri (navigation için)
- */
 const sendPushNotification = async (tokens, title, body, data = {}) => {
   const tokenList = Array.isArray(tokens) ? tokens : [tokens];
 
-  // Geçersiz token'ları filtrele
   const validTokens = tokenList.filter(
     (t) => t && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['))
   );
@@ -30,15 +23,29 @@ const sendPushNotification = async (tokens, title, body, data = {}) => {
   }));
 
   try {
-    await axios.post(EXPO_PUSH_URL, messages, {
+    const res = await axios.post(EXPO_PUSH_URL, messages, {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip, deflate',
       },
     });
+
+    const tickets = res.data?.data ?? [];
+
+    const invalidTokens = tickets
+      .map((ticket, i) => ({ ticket, token: validTokens[i] }))
+      .filter(({ ticket }) => ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered')
+      .map(({ token }) => token);
+
+    if (invalidTokens.length > 0) {
+      await prisma.user.updateMany({
+        where: { pushToken: { in: invalidTokens } },
+        data: { pushToken: null },
+      });
+    }
   } catch (err) {
-    console.error('Push notification hatası:', err.message);
+    console.error('Push notification hatas\u0131:', err.message, err.response?.data);
   }
 };
 
