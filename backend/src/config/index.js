@@ -1,11 +1,12 @@
 require('dotenv').config();
 
+// Environment degiskenlerini uygulama ici tek config nesnesine toplar.
 const config = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET,
-  
-  // Services
+
+  // Harici servis konfigurasyonlari.
   tmdbApiKey: process.env.TMDB_API_KEY,
   r2: {
     accountId: process.env.R2_ACCOUNT_ID,
@@ -14,8 +15,8 @@ const config = {
     bucketName: process.env.R2_BUCKET_NAME,
     publicUrl: process.env.R2_PUBLIC_URL,
   },
-  
-  // Constants
+
+  // Uygulama sabitleri tek yerde tutulur.
   constants: {
     MIN_PASSWORD_LENGTH: 6,
     MAX_BIO_LENGTH: 500,
@@ -25,7 +26,7 @@ const config = {
   },
 };
 
-// Validation
+// Kritik env alanlari boot aninda dogrulanir.
 if (!config.jwtSecret) throw new Error('JWT_SECRET gerekli');
 if (!config.tmdbApiKey) throw new Error('TMDB_API_KEY gerekli');
 

@@ -33,14 +33,19 @@ model User {
 }
 
 model Movie {
-  id      String  @id @default(cuid())
-  tmdbId  Int     @unique
-  title   String
-  poster  String?
-  year    Int?
+  id       String   @id @default(cuid())
+  tmdbId   Int      @unique
+  title    String
+  poster   String?
+  year     Int?
+  runtime  Int?
+  genres   String?  // JSON array, e.g. ["Drama","Romance"]
+  director String?
+  cast     String?  // JSON array, e.g. ["Actor1","Actor2"]
 
-  users   UserMovie[]
-  ratings MovieRating[]
+  users    UserMovie[]
+  ratings  MovieRating[]
+  messages Message[]
 }
 
 model UserMovie {
@@ -117,18 +122,29 @@ model Match {
   @@index([user2Id])
 }
 
+enum MessageType {
+  USER
+  SYSTEM
+}
+
 model Message {
-  id        String    @id @default(cuid())
-  matchId   String
-  senderId  String
-  text      String
-  createdAt DateTime  @default(now())
-  readAt    DateTime?
+  id           String      @id @default(cuid())
+  matchId      String
+  senderId     String?
+  movieId      String?
+  type         MessageType @default(USER)
+  text         String
+  createdAt    DateTime    @default(now())
+  readAt       DateTime?
+  deletedFor   String[]    @default([])  // userId listesi - benden sil
+  deletedForAll Boolean    @default(false) // herkesten sil
 
   match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  sender User  @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender User? @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  movie  Movie? @relation(fields: [movieId], references: [id], onDelete: SetNull)
 
   @@index([matchId])
   @@index([senderId])
+  @@index([movieId])
   @@index([matchId, createdAt])
 }

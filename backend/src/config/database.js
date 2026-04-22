@@ -2,6 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 
 let prisma;
 
+// Prisma client'i lazy-init ile tek instance olarak uretir.
 function getPrisma() {
   if (!prisma) {
     prisma = new PrismaClient({
@@ -11,6 +12,7 @@ function getPrisma() {
   return prisma;
 }
 
+// Uygulama kapanisinda acik DB baglantisini temizlemek icin kullanilir.
 async function disconnectPrisma() {
   if (prisma) {
     await prisma.$disconnect();

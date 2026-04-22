@@ -1,3 +1,4 @@
+// Uygulama seviyesinde kontrollu hata firlatmak icin kullanilan custom error.
 class ApiError extends Error {
   constructor(statusCode, message) {
     super(message);
@@ -5,6 +6,7 @@ class ApiError extends Error {
   }
 }
 
+// Express hata middleware'i; bilinen hata tiplerini tutarli response'a cevirir.
 const errorHandler = (err, req, res, next) => {
   console.error(err);
 
@@ -13,16 +15,17 @@ const errorHandler = (err, req, res, next) => {
   }
 
   if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({ success: false, error: 'Geçersiz token' });
+    return res.status(401).json({ success: false, error: 'Gecersiz token' });
   }
 
   if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({ success: false, error: 'Token süresi doldu' });
+    return res.status(401).json({ success: false, error: 'Token suresi doldu' });
   }
 
-  res.status(500).json({ success: false, error: 'Sunucu hatası' });
+  return res.status(500).json({ success: false, error: 'Sunucu hatasi' });
 };
 
+// Async route handler'larda try/catch tekrarini kaldirir.
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };

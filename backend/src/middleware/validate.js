@@ -1,3 +1,4 @@
+// Zod schema'sini request'in body/query/params alanlarina uygular.
 const validate = (schema) => (req, res, next) => {
   const result = schema.safeParse({
     body: req.body,
@@ -6,12 +7,15 @@ const validate = (schema) => (req, res, next) => {
   });
 
   if (!result.success) {
+    const firstError = result.error?.errors?.[0];
     return res.status(400).json({
       success: false,
-      error: result.error.errors[0].message,
+      error: firstError?.message ?? 'Gecersiz istek',
+      details: result.error?.errors ?? [],
     });
   }
 
+  // Controller isterse parse edilmis degerlere `req.validated` uzerinden erisir.
   req.validated = result.data;
   next();
 };
