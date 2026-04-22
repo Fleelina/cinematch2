@@ -1,14 +1,82 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, Image, StyleSheet,
-  ActivityIndicator, TouchableOpacity, Alert, Pressable,
+  ActivityIndicator, TouchableOpacity, Alert, Pressable, Animated, Platform,
 } from 'react-native';
 import api from '../services/api';
 import { Colors, Radii, Shadows } from '../theme';
 
+function Toast({ visible, message, onHide }) {
+  const translateY = useRef(new Animated.Value(-120)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    Animated.parallel([
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 18, stiffness: 200 }),
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+    ]).start();
+    const t = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(translateY, { toValue: -120, duration: 260, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]).start(() => onHide?.());
+    }, 2800);
+    return () => clearTimeout(t);
+  }, [visible]);
+
+  if (!visible) return null;
+  return (
+    <Animated.View style={[toastStyles.wrap, { transform: [{ translateY }], opacity }]} pointerEvents="none">
+      <View style={toastStyles.toast}>
+        <View style={toastStyles.bar} />
+        <View style={toastStyles.iconWrap}>
+          <Text style={toastStyles.icon}>✓</Text>
+        </View>
+        <Text style={toastStyles.msg} numberOfLines={2}>{message}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+const toastStyles = StyleSheet.create({
+  wrap: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 54 : 38,
+    left: 16, right: 16,
+    zIndex: 9999,
+  },
+  toast: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radii.lg,
+    borderWidth: 1, borderColor: Colors.green + '40',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45, shadowRadius: 20, elevation: 16,
+  },
+  bar: { width: 3, alignSelf: 'stretch', backgroundColor: Colors.green },
+  iconWrap: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: Colors.greenDim,
+    justifyContent: 'center', alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  icon: { fontSize: 14, fontWeight: '800', color: Colors.green },
+  msg: {
+    flex: 1, color: Colors.textPrimary,
+    fontSize: 13, fontWeight: '600',
+    paddingVertical: 14, paddingRight: 14, lineHeight: 18,
+  },
+});
+
 export default function WatchlistScreen({ navigation }) {
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState({ visible: false, message: '' });
+
+  const showToast = (message) => setToast({ visible: true, message });
 
   const fetchWatchlist = useCallback(async () => {
     setLoading(true);
@@ -28,7 +96,7 @@ export default function WatchlistScreen({ navigation }) {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      navigation.navigate('Swipe');
+      navigation.navigate('MainTabs', { screen: 'Swipe' });
     }
   };
 
@@ -48,7 +116,14 @@ export default function WatchlistScreen({ navigation }) {
       });
       await api.delete(`/movies/watchlist/${item.tmdbId}`);
       setWatchlist((prev) => prev.filter((m) => m.tmdbId !== item.tmdbId));
-      Alert.alert('Eklendi!', `"${item.title}" filmlerine taşındı.`);
+      navigation.navigate('MovieDetail', {
+        tmdbId: item.tmdbId,
+        title: item.title,
+        poster: item.poster,
+        year: item.year,
+        showRatingPrompt: true,
+      });
+      showToast(`"${item.title}" filmlerine eklendi! 🎬`);
     } catch {
       Alert.alert('Hata', 'İşlem başarısız');
     }
@@ -64,6 +139,11 @@ export default function WatchlistScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        onHide={() => setToast({ visible: false, message: '' })}
+      />
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
           <Text style={styles.backBtnText}>←</Text>
@@ -86,7 +166,7 @@ export default function WatchlistScreen({ navigation }) {
           </Text>
           <Pressable
             style={styles.goSwipeBtn}
-            onPress={() => navigation.navigate('Swipe')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Swipe' })}
           >
             <Text style={styles.goSwipeBtnText}>Film Keşfet</Text>
           </Pressable>

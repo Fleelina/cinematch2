@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, Image, ScrollView, StyleSheet,
   ActivityIndicator, TouchableOpacity, FlatList, Alert
@@ -52,7 +52,9 @@ function MovieDetailSkeleton() {
 }
 
 export default function MovieDetailScreen({ route, navigation }) {
-  const { tmdbId, title, poster: initialPoster, year: initialYear } = route.params;
+  const { tmdbId, title, poster: initialPoster, year: initialYear, showRatingPrompt } = route.params;
+  const scrollRef = useRef(null);
+  const ratingRef = useRef(null);
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -73,6 +75,18 @@ export default function MovieDetailScreen({ route, navigation }) {
   };
 
   useEffect(() => { fetchDetail(); }, [tmdbId]);
+
+  useEffect(() => {
+    if (showRatingPrompt && movie && !movie.userRating) {
+      setTimeout(() => {
+        ratingRef.current?.measureLayout(
+          scrollRef.current,
+          (_, y) => scrollRef.current?.scrollTo({ y: y - 20, animated: true }),
+          () => {}
+        );
+      }, 400);
+    }
+  }, [showRatingPrompt, movie]);
 
   const handleToggle = async () => {
     if (!movie) return;
@@ -204,7 +218,7 @@ export default function MovieDetailScreen({ route, navigation }) {
   );
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView ref={scrollRef} style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Backdrop */}
       {movie.backdrop
         ? <Image source={{ uri: movie.backdrop }} style={styles.backdrop} />
@@ -259,7 +273,7 @@ export default function MovieDetailScreen({ route, navigation }) {
         </Text>
 
         {/* CineMatch Puanı */}
-        <View style={styles.cinematchBox}>
+        <View ref={ratingRef} style={[styles.cinematchBox, showRatingPrompt && !movie.userRating && styles.cinematchBoxHighlight]}>
           {/* Üst satır: kalp + puan + oy sayısı */}
           <View style={styles.cinematchTop}>
             <CineMatchRating
@@ -420,6 +434,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#242424',
     gap: 10,
+  },
+  cinematchBoxHighlight: {
+    borderColor: '#E50914',
+    borderWidth: 1.5,
+    shadowColor: '#E50914',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   cinematchTop: {
     flexDirection: 'row',

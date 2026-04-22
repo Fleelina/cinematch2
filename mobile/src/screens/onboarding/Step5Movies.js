@@ -7,6 +7,7 @@ import { Colors, Radii, Shadows } from '../../theme';
 import OnboardingProgress from '../../components/OnboardingProgress';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { useAuth } from '../../context/AuthContext';
+import { setToken } from '../../services/tokenStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../services/api';
 
@@ -83,7 +84,7 @@ function MovieCard({ movie, selected, onPress }) {
 
 export default function Step5Movies({ navigation }) {
   const { data, update } = useOnboarding();
-  const { setToken, setUser } = useAuth();
+  const { setUser } = useAuth();
 
   const [selectedIds, setSelectedIds] = useState(new Set(data.movies.map((m) => m.tmdbId)));
   const [selectedMap, setSelectedMap] = useState(new Map(data.movies.map((m) => [m.tmdbId, m])));

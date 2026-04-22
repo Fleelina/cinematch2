@@ -11,17 +11,27 @@ import { Colors, Radii, Shadows } from '../theme';
 export default function ProfileScreen({ navigation }) {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
+  const [blockedCount, setBlockedCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const fetchStats = useCallback(async () => {
+  const fetchProfileData = useCallback(async () => {
     try {
-      const res = await api.get('/users/profile/stats');
-      setStats(res.data);
-    } catch { /* sessiz */ }
-    finally { setLoading(false); }
+      const [statsRes, blockedRes] = await Promise.all([
+        api.get('/users/profile/stats'),
+        api.get('/users/profile/blocked'),
+      ]);
+      setStats(statsRes.data);
+      setBlockedCount(blockedRes.data?.length ?? 0);
+    } catch {
+      // sessiz
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useFocusEffect(useCallback(() => { fetchStats(); }, []));
+  useFocusEffect(useCallback(() => {
+    fetchProfileData();
+  }, [fetchProfileData]));
 
   const displayName = user?.showAge && user?.age ? `${user.name}, ${user.age}` : user?.name;
 
@@ -31,7 +41,6 @@ export default function ProfileScreen({ navigation }) {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 50 }}
     >
-      {/* Header */}
       <View style={styles.topBar}>
         <Text style={styles.topBarTitle}>Profil</Text>
         <Pressable
@@ -44,7 +53,6 @@ export default function ProfileScreen({ navigation }) {
 
       {loading ? <SkeletonProfile /> : (
         <>
-          {/* Hero */}
           <View style={styles.hero}>
             <Avatar user={user} size={96} />
             <Text style={styles.displayName}>{displayName}</Text>
@@ -52,36 +60,53 @@ export default function ProfileScreen({ navigation }) {
             {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
           </View>
 
-          {/* Stats */}
           <View style={styles.statsRow}>
             <StatCard icon="🎬" value={stats?.movieCount ?? 0} label="Film" />
-            <StatCard icon="❤️" value={stats?.matchCount ?? 0} label="Eşleşme" />
+            <StatCard icon="❤️" value={stats?.matchCount ?? 0} label="Eslesme" />
             <StatCard
               icon="⭐"
-              value={stats?.avgRating || '—'}
+              value={stats?.avgRating || '-'}
               label="Ort. Puan"
               highlight={!!stats?.avgRating}
             />
           </View>
 
-          {/* Son eklenenler */}
+          <TouchableOpacity
+            style={styles.blockedEntry}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('BlockedUsers')}
+          >
+            <View style={styles.blockedEntryLeft}>
+              <View style={styles.blockedIconWrap}>
+                <Text style={styles.blockedIcon}>🚫</Text>
+              </View>
+              <View>
+                <Text style={styles.blockedTitle}>Engellenenler</Text>
+                <Text style={styles.blockedSub}>Engelledigin profilleri gor</Text>
+              </View>
+            </View>
+            <View style={styles.blockedEntryRight}>
+              <Text style={styles.blockedCount}>{blockedCount}</Text>
+              <Text style={styles.blockedArrow}>›</Text>
+            </View>
+          </TouchableOpacity>
+
           {stats?.topMovies?.length > 0 && (
             <Section emoji="🎞️" title="Son Eklenenler">
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-                {stats.topMovies.map((m, i) => (
+                {stats.topMovies.map((movie, index) => (
                   <TouchableOpacity
-                    key={i}
+                    key={index}
                     style={styles.movieThumb}
-                    onPress={() => navigation.navigate('MovieDetail', { tmdbId: m.tmdbId, title: m.title })}
+                    onPress={() => navigation.navigate('MovieDetail', { tmdbId: movie.tmdbId, title: movie.title })}
                   >
-                    {m.poster
-                      ? <Image source={{ uri: m.poster }} style={styles.movieThumbImg} />
-                      : (
-                        <View style={[styles.movieThumbImg, styles.movieThumbFallback]}>
-                          <Text style={{ fontSize: 24 }}>🎬</Text>
-                        </View>
-                      )
-                    }
+                    {movie.poster ? (
+                      <Image source={{ uri: movie.poster }} style={styles.movieThumbImg} />
+                    ) : (
+                      <View style={[styles.movieThumbImg, styles.movieThumbFallback]}>
+                        <Text style={{ fontSize: 24 }}>🎬</Text>
+                      </View>
+                    )}
                     <View style={styles.movieThumbOverlay} />
                   </TouchableOpacity>
                 ))}
@@ -89,41 +114,47 @@ export default function ProfileScreen({ navigation }) {
             </Section>
           )}
 
-          {/* Alışkanlıklar */}
           {stats && (
-            <Section emoji="📊" title="İzleme Alışkanlıkları">
+            <Section emoji="📊" title="Izleme Aliskanliklari">
               <View style={styles.habitsCard}>
                 {stats.avgRating && (
                   <HabitRow label="Ortalama puan" value={`⭐ ${stats.avgRating}`} />
                 )}
                 {stats.favoriteEra && (
-                  <HabitRow label="Favori dönem" value={stats.favoriteEra} />
+                  <HabitRow label="Favori donem" value={stats.favoriteEra} />
                 )}
                 {stats.watchStyle && (
                   <HabitRow
-                    label="İzleme tarzı"
+                    label="Izleme tarzi"
                     value={`${stats.watchStyle.label} ${stats.watchStyle.emoji}`}
                     last
                   />
                 )}
                 {stats.movieCount === 0 && (
                   <Text style={styles.habitsEmpty}>
-                    Film ekledikçe istatistiklerin burada görünür.
+                    Film ekledikce istatistiklerin burada gorunur.
                   </Text>
                 )}
               </View>
             </Section>
           )}
 
-          {/* Profil güçlendir CTA */}
+          <TouchableOpacity
+            style={styles.statsCta}
+            onPress={() => navigation.navigate('Stats')}
+          >
+            <Text style={styles.statsCtaText}>📈 Istatistiklerimi Gor</Text>
+            <Text style={styles.statsCtaArrow}>›</Text>
+          </TouchableOpacity>
+
           {stats && stats.movieCount < 10 && (
             <View style={styles.boostCard}>
               <View style={styles.boostLeft}>
                 <Text style={styles.boostEmoji}>🔥</Text>
                 <View>
-                  <Text style={styles.boostTitle}>Profilini güçlendir</Text>
+                  <Text style={styles.boostTitle}>Profilini guclendir</Text>
                   <Text style={styles.boostSub}>
-                    {10 - stats.movieCount} film daha ekle, daha iyi eşleş
+                    {10 - stats.movieCount} film daha ekle, daha iyi esles
                   </Text>
                 </View>
               </View>
@@ -141,8 +172,6 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-// ─── Alt bileşenler ─────────────────────────────────────────────────────────
-
 function Avatar({ user, size }) {
   if (user?.avatar) {
     return (
@@ -152,12 +181,13 @@ function Avatar({ user, size }) {
           style={{ width: size, height: size, borderRadius: size / 2 }}
         />
         <View style={[styles.avatarRing, {
-          width: size + 8, height: size + 8, borderRadius: (size + 8) / 2,
-          top: -4, left: -4,
-        }]} />
+          width: size + 8, height: size + 8, borderRadius: (size + 8) / 2, top: -4, left: -4,
+        }]}
+        />
       </View>
     );
   }
+
   return (
     <View style={styles.avatarWrap}>
       <View style={[styles.avatarFallback, { width: size, height: size, borderRadius: size / 2 }]}>
@@ -166,9 +196,9 @@ function Avatar({ user, size }) {
         </Text>
       </View>
       <View style={[styles.avatarRing, {
-        width: size + 8, height: size + 8, borderRadius: (size + 8) / 2,
-        top: -4, left: -4,
-      }]} />
+        width: size + 8, height: size + 8, borderRadius: (size + 8) / 2, top: -4, left: -4,
+      }]}
+      />
     </View>
   );
 }
@@ -225,8 +255,6 @@ function SkeletonProfile() {
   );
 }
 
-// ─── Stiller ────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
 
@@ -242,7 +270,6 @@ const styles = StyleSheet.create({
   },
   settingsIcon: { fontSize: 16 },
 
-  // Hero
   hero: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 22 },
   avatarWrap: { position: 'relative', marginBottom: 16 },
   avatarFallback: {
@@ -261,7 +288,6 @@ const styles = StyleSheet.create({
     lineHeight: 19, marginTop: 2,
   },
 
-  // Stats
   statsRow: { flexDirection: 'row', marginHorizontal: 16, gap: 10, marginBottom: 8 },
   statCard: {
     flex: 1, backgroundColor: Colors.bgCard,
@@ -274,13 +300,43 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '800', color: Colors.textPrimary },
   statLabel: { fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Section
+  blockedEntry: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: Radii.lg,
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.06)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  blockedEntryLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  blockedIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(200,16,46,0.10)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(200,16,46,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blockedIcon: { fontSize: 16 },
+  blockedTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  blockedSub: { color: Colors.textSecondary, fontSize: 12 },
+  blockedEntryRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  blockedCount: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800' },
+  blockedArrow: { color: Colors.textMuted, fontSize: 20 },
+
   section: { marginHorizontal: 16, marginTop: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
   sectionEmoji: { fontSize: 17 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
 
-  // Film thumb
   movieThumb: { marginRight: 10, position: 'relative' },
   movieThumbImg: { width: 98, height: 142, borderRadius: Radii.md, backgroundColor: Colors.bgElevated },
   movieThumbFallback: { justifyContent: 'center', alignItems: 'center' },
@@ -289,7 +345,6 @@ const styles = StyleSheet.create({
     borderWidth: 0.5, borderColor: Colors.border,
   },
 
-  // Alışkanlıklar
   habitsCard: {
     backgroundColor: Colors.bgCard,
     borderRadius: Radii.lg, marginTop: 12,
@@ -307,7 +362,22 @@ const styles = StyleSheet.create({
     padding: 20, fontStyle: 'italic',
   },
 
-  // Boost CTA
+  statsCta: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radii.lg,
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statsCtaText: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
+  statsCtaArrow: { color: Colors.textMuted, fontSize: 20 },
+
   boostCard: {
     marginHorizontal: 16, marginTop: 24,
     backgroundColor: '#110508',
@@ -326,7 +396,6 @@ const styles = StyleSheet.create({
   },
   boostBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
 
-  // Skeleton
   skeletonCircle: { backgroundColor: Colors.bgElevated },
   skeletonBlock: { backgroundColor: Colors.bgElevated, borderRadius: Radii.sm },
 });
