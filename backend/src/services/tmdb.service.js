@@ -2,6 +2,8 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { translate } = require('@vitalets/google-translate-api/dist/cjs/index.js');
 
+// TMDB icin ortak axios client.
+// Varsayilan dil arama ve listeleme cevaplarini tutarli hale getirir.
 const tmdbClient = axios.create({
   baseURL: 'https://api.themoviedb.org/3',
   headers: { Authorization: `Bearer ${process.env.TMDB_READ_ACCESS_TOKEN}` },
@@ -9,6 +11,8 @@ const tmdbClient = axios.create({
   timeout: 10000,
 });
 
+// Film aramasini normalize edilmis query bazli cache'ler.
+// Donus modeli uygulamanin tukettigi minimum alana indirgenir.
 const searchMovies = async (query) => {
   const normalizedQuery = query.toLowerCase().trim();
   const cacheKey = `search:${normalizedQuery}`;
@@ -30,6 +34,8 @@ const searchMovies = async (query) => {
   return movies;
 };
 
+// Ag kaynakli gecici hatalarda kontrollu retry uygular.
+// 4xx hatalar tekrar edilmez.
 const withRetry = async (fn, retries = 2, delay = 500) => {
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
@@ -44,6 +50,8 @@ const withRetry = async (fn, retries = 2, delay = 500) => {
   }
 };
 
+// Liste endpoint'leri icin ortak cache + retry yardimcisi.
+// Ham `results` dizisini saklar, sekillendirme cagiranda kalir.
 const getCachedResults = async (cacheKey, url, extraParams = {}, ttl = 600) => {
   const cached = cache.get(cacheKey);
   if (cached) return cached;
@@ -55,6 +63,8 @@ const getCachedResults = async (cacheKey, url, extraParams = {}, ttl = 600) => {
   return results;
 };
 
+// Film detayini ve cast/crew bilgisini tek servis cevabinda birlestirir.
+// Detay ekraninin ihtiyac duydugu alanlari burada normalize eder.
 const getMovieDetail = async (tmdbId) => {
   const cacheKey = `movie_detail:${tmdbId}`;
   const cached = cache.get(cacheKey);
@@ -96,6 +106,7 @@ const getMovieDetail = async (tmdbId) => {
   return data;
 };
 
+// Oneri akisi icin kullanilan temel TMDB havuzlarini paralel toplar.
 const getSuggestionPools = async ({ popularPage, nowPlayingPage, topRatedPage, classicsPage }) =>
   Promise.all([
     getCachedResults(`popular:${popularPage}`, '/movie/popular', { page: popularPage }, 600),
@@ -115,9 +126,11 @@ const getSuggestionPools = async ({ popularPage, nowPlayingPage, topRatedPage, c
     ),
   ]);
 
+// Benzer filmler havuzunu film ve sayfa bazli cache'ler.
 const getSimilarMovies = (tmdbId, page) =>
   getCachedResults(`similar:${tmdbId}:${page}`, `/movie/${tmdbId}/similar`, { page }, 900);
 
+// Metni Turkceye cevirir; hata durumunda akisi kesmeyip orijinal metni doner.
 const translateText = async (text) => {
   const cacheKey = `translate:${text.slice(0, 50)}`;
   const cached = cache.get(cacheKey);
@@ -133,6 +146,8 @@ const translateText = async (text) => {
   }
 };
 
+// Kisi detayini TR biyografi oncelikli olacak sekilde derler.
+// Turkce biyografi yetersizse EN fallback kullanilir.
 const getPersonDetail = async (personId) => {
   const cacheKey = `person_detail:${personId}`;
   const cached = cache.get(cacheKey);
@@ -200,6 +215,8 @@ const getPersonDetail = async (personId) => {
   return data;
 };
 
+// Kisi aramasini hafif bir sonuc modeliyle doner.
+// Profil fotosu olmayan kayitlar liste disi birakilir.
 const searchPeople = async (query) => {
   const cacheKey = `characters:${query.toLowerCase().trim()}`;
   const cached = cache.get(cacheKey);

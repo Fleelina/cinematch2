@@ -27,16 +27,16 @@ const generateToken = (userId) => {
 const createUserWithMovies = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies }) => {
   const hashedPassword = await hashPassword(password);
 
-  // Filmleri DB'de paralel upsert et
+  // Onboarding'den gelen filmler önce tekilleştirilir; var olan kayıtlar tekrar oluşturulmaz.
   const movieData = [];
   if (Array.isArray(movies) && movies.length > 0) {
     const results = await Promise.allSettled(
       movies.map((movie) =>
         prisma.movie.upsert({
-          where: { tmdbId: movie.tmdbId },
+          where: { tmdbId: Number(movie.tmdbId) },
           update: {},
           create: {
-            tmdbId: movie.tmdbId,
+            tmdbId: Number(movie.tmdbId),
             title: movie.title,
             poster: movie.poster || null,
             year: movie.year ? parseInt(movie.year) : null,
@@ -84,7 +84,8 @@ const formatUserResponse = (user) => ({
   bio: user.bio,
 });
 
-const register = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies }) => {
+const register = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, gender, movies }) => {
+  // Önce benzersiz alanlar kontrol edilir; başarısız senaryoda gereksiz hash ve create maliyeti oluşmaz.
   const existingEmail = await findUserByEmail(email);
   if (existingEmail) throw new ApiError(409, 'Bu email zaten kayıtlı');
 
@@ -93,15 +94,21 @@ const register = async ({ name, email, password, username, bio, avatar, avatarTy
     if (existingUsername) throw new ApiError(409, 'Bu kullanıcı adı zaten alınmış');
   }
 
+  // gender şu an schema'da yok, sadece log'a düşürüyoruz
+  // İleride schema'ya eklenince buraya da eklenir
   const user = await createUserWithMovies({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies });
   const token = generateToken(user.id);
 
-  // temp avatar varsa finalize et
+  // Kayıt tamamlandıktan sonra geçici avatar kalıcı kullanıcı anahtarına taşınır.
   if (avatar && avatarType === 'upload') {
-    const finalUrl = await finalizeAvatar(avatar, user.id);
-    if (finalUrl !== avatar) {
-      await prisma.user.update({ where: { id: user.id }, data: { avatar: finalUrl } });
-      user.avatar = finalUrl;
+    try {
+      const finalUrl = await finalizeAvatar(avatar, user.id);
+      if (finalUrl !== avatar) {
+        await prisma.user.update({ where: { id: user.id }, data: { avatar: finalUrl } });
+        user.avatar = finalUrl;
+      }
+    } catch (err) {
+      console.error('Avatar finalize hatası (kritik değil):', err.message);
     }
   }
 
@@ -112,6 +119,7 @@ const login = async ({ email, password }) => {
   const user = await findUserByEmail(email);
   if (!user) throw new ApiError(401, 'Email veya şifre hatalı');
 
+  // Hata mesajı sabit tutulur; email'in var olup olmadığı dışarı sızdırılmaz.
   const isValid = await comparePassword(password, user.password);
   if (!isValid) throw new ApiError(401, 'Email veya şifre hatalı');
 

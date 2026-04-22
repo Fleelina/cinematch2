@@ -1,6 +1,7 @@
 const { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand } = require('@aws-sdk/client-s3');
 const { ApiError } = require('../middleware/errorHandler');
 
+// Cloudflare R2, S3 uyumlu client ile kullanilir.
 const r2 = new S3Client({
   region: 'auto',
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -12,12 +13,14 @@ const r2 = new S3Client({
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
+// Base64 gorseli boyut kontrolunden gecirip R2'ye yukler.
+// Dosya anahtari folder + identifier + timestamp ile uretildigi icin cakisma riski dusuktur.
 const uploadToR2 = async (base64, mimeType, folder, identifier) => {
   const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
   const buffer = Buffer.from(base64Data, 'base64');
 
   if (buffer.length > MAX_SIZE_BYTES) {
-    throw new ApiError(400, 'Görsel 5MB\'dan büyük olamaz');
+    throw new ApiError(400, 'Gorsel 5MB\'dan buyuk olamaz');
   }
 
   const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
@@ -34,6 +37,7 @@ const uploadToR2 = async (base64, mimeType, folder, identifier) => {
   return `${process.env.R2_PUBLIC_URL}/${key}`;
 };
 
+// Public URL'den bucket icindeki object key'i cikarir.
 const extractKeyFromUrl = (url) => {
   if (!url) return null;
   try {
@@ -44,6 +48,7 @@ const extractKeyFromUrl = (url) => {
   }
 };
 
+// Silme islemi best-effort calisir; hata uygulama akisina yansitilmaz.
 const deleteFromR2 = async (keyOrUrl) => {
   if (!keyOrUrl) return;
   const key = keyOrUrl.startsWith('http') ? extractKeyFromUrl(keyOrUrl) : keyOrUrl;
@@ -54,10 +59,12 @@ const deleteFromR2 = async (keyOrUrl) => {
       Key: key,
     }));
   } catch (err) {
-    console.error('[R2] Silme hatası:', err.message);
+    console.error('[R2] Silme hatasi:', err.message);
   }
 };
 
+// Temp avatar'i kalici alana kopyalar.
+// Kopyalama basariliysa temp obje async olarak silinir.
 const finalizeAvatar = async (tempUrl, userId) => {
   if (!tempUrl || !tempUrl.includes('temp-')) return tempUrl;
 
@@ -79,8 +86,8 @@ const finalizeAvatar = async (tempUrl, userId) => {
 
     return `${process.env.R2_PUBLIC_URL}/${finalKey}`;
   } catch (err) {
-    console.error('[R2] Finalize hatası:', err.message);
-    return tempUrl; // hata olursa temp URL ile devam et
+    console.error('[R2] Finalize hatasi:', err.message);
+    return tempUrl; // Finalize basarisizsa mevcut temp URL ile devam edilir.
   }
 };
 

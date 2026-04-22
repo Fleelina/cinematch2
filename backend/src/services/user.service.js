@@ -1,42 +1,59 @@
 const prisma = require('../prisma');
 const { ApiError } = require('../middleware/errorHandler');
 const { deleteFromR2 } = require('./upload.service');
+
 const DISLIKE_COOLDOWN_HOURS = 24;
 
+// Profil ekraninin ihtiyac duydugu kullanici + film iliskilerini yukler.
 const getProfile = (userId) =>
   prisma.user.findUnique({
     where: { id: userId },
     include: { movies: { include: { movie: true } } },
   });
 
+// Username benzersizligini, mevcut kullaniciyi haric tutarak kontrol eder.
 const isUsernameTaken = (username, excludeUserId) =>
   prisma.user.findFirst({
     where: { username, NOT: { id: excludeUserId } },
   });
 
+// Hafif username uygunluk kontrolu; sadece var/yok bilgisi doner.
 const isUsernameAvailable = async (username) => {
   const existing = await prisma.user.findFirst({ where: { username } });
   return !existing;
 };
 
+// User update islemleri icin ince bir Prisma wrapper'i.
 const updateUser = (userId, data) =>
   prisma.user.update({ where: { id: userId }, data });
 
+// Push token son gorulen degerle overwrite edilir.
 const savePushToken = (userId, token) =>
   prisma.user.update({ where: { id: userId }, data: { pushToken: token } });
 
+// Hassas alanlari response modelinden temizler.
 const stripPassword = ({ password, ...user }) => user;
 
+// Discover akisi icin aday kullanicilari uretir.
+// Daha once begenilenler ve cooldown icindeki dislike'lar dislanir.
 const discoverUsers = async (userId) => {
   const cooldownDate = new Date(Date.now() - DISLIKE_COOLDOWN_HOURS * 60 * 60 * 1000);
 
-  const [likes, recentDislikes, myMovies] = await Promise.all([
+  const [likes, recentDislikes, blockedUsers, myMovies] = await Promise.all([
     prisma.interaction.findMany({ where: { fromUserId: userId, type: 'LIKE' }, select: { toUserId: true } }),
     prisma.interaction.findMany({ where: { fromUserId: userId, type: 'DISLIKE', createdAt: { gte: cooldownDate } }, select: { toUserId: true } }),
+    prisma.interaction.findMany({ where: { fromUserId: userId, type: 'BLOCK' }, select: { toUserId: true } }),
     prisma.userMovie.findMany({ where: { userId }, select: { movieId: true } }),
   ]);
 
-  const excludedIds = [...new Set([userId, ...likes.map((i) => i.toUserId), ...recentDislikes.map((i) => i.toUserId)])];
+  const excludedIds = [
+    ...new Set([
+      userId,
+      ...likes.map((i) => i.toUserId),
+      ...recentDislikes.map((i) => i.toUserId),
+      ...blockedUsers.map((i) => i.toUserId),
+    ]),
+  ];
   const myMovieIds = myMovies.map((m) => m.movieId);
   const myMovieIdSet = new Set(myMovieIds);
 
@@ -63,14 +80,16 @@ const discoverUsers = async (userId) => {
     .sort((a, b) => b.matchScore - a.matchScore);
 };
 
+// Profilde gosterilecek izleme stilini film sayisindan turetir.
 const computeWatchStyle = (count) => {
-  if (count >= 50) return { label: 'Sinefil', emoji: '🎩' };
-  if (count >= 20) return { label: 'Binge Watcher', emoji: '🍿' };
-  if (count >= 10) return { label: 'Film Sever', emoji: '🎬' };
-  if (count >= 1)  return { label: 'Başlangıç', emoji: '🌱' };
+  if (count >= 50) return { label: 'Sinefil', emoji: '\uD83C\uDFA9' };
+  if (count >= 20) return { label: 'Binge Watcher', emoji: '\uD83C\uDF7F' };
+  if (count >= 10) return { label: 'Film Sever', emoji: '\uD83C\uDFAC' };
+  if (count >= 1) return { label: 'Başlangıç', emoji: '\uD83C\uDF31' };
   return null;
 };
 
+// Kullanicinin en yogun film donemini decade bazinda hesaplar.
 const computeFavoriteEra = (movieYears) => {
   const eraCounts = {};
   for (const um of movieYears) {
@@ -84,8 +103,10 @@ const computeFavoriteEra = (movieYears) => {
     : null;
 };
 
+// Kullanicinin kendi profil istatistiklerini toplar.
+// Sorgular paralel calisir, turetilmis alanlar servis katmaninda hesaplanir.
 const getProfileStats = async (userId) => {
-  const [movieCount, matchCount, ratings, topMovies, movieYears] = await Promise.all([
+  const [movieCount, matchCount, ratings, topMovies, allMovies] = await Promise.all([
     prisma.userMovie.count({ where: { userId } }),
     prisma.match.count({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
     prisma.movieRating.findMany({ where: { userId }, select: { rating: true } }),
@@ -95,23 +116,102 @@ const getProfileStats = async (userId) => {
       orderBy: { movie: { id: 'desc' } },
       take: 4,
     }),
-    prisma.userMovie.findMany({ where: { userId }, select: { movie: { select: { year: true } } } }),
+    prisma.userMovie.findMany({
+      where: { userId },
+      select: {
+        movie: {
+          select: { year: true, runtime: true, genres: true, director: true, cast: true },
+        },
+      },
+    }),
   ]);
 
   const avgRating = ratings.length > 0
     ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
     : null;
 
+  // Tür dağılımı
+  const genreCounts = {};
+  for (const { movie } of allMovies) {
+    if (!movie.genres) continue;
+    try {
+      const parsed = JSON.parse(movie.genres);
+      for (const g of parsed) genreCounts[g] = (genreCounts[g] || 0) + 1;
+    } catch {}
+  }
+  const topGenres = Object.entries(genreCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([genre, count]) => ({ genre, count }));
+
+  // Toplam dakika ve gün
+  const totalMinutes = allMovies.reduce((sum, { movie }) => sum + (movie.runtime || 0), 0);
+  const totalDays = totalMinutes > 0 ? (totalMinutes / 1440).toFixed(1) : null;
+
+  // En fazla filmi izlenen yönetmen
+  const directorCounts = {};
+  for (const { movie } of allMovies) {
+    if (!movie.director) continue;
+    directorCounts[movie.director] = (directorCounts[movie.director] || 0) + 1;
+  }
+  const topDirector = Object.entries(directorCounts).sort((a, b) => b[1] - a[1])[0] || null;
+
+  // En fazla filmi izlenen oyuncu
+  const actorCounts = {};
+  for (const { movie } of allMovies) {
+    if (!movie.cast) continue;
+    try {
+      const parsed = JSON.parse(movie.cast);
+      for (const actor of parsed) actorCounts[actor] = (actorCounts[actor] || 0) + 1;
+    } catch {}
+  }
+  const topActor = Object.entries(actorCounts).sort((a, b) => b[1] - a[1])[0] || null;
+
   return {
     movieCount,
     matchCount,
     avgRating,
-    favoriteEra: computeFavoriteEra(movieYears),
+    favoriteEra: computeFavoriteEra(allMovies),
     topMovies: topMovies.map((um) => um.movie),
     watchStyle: computeWatchStyle(movieCount),
+    topGenres,
+    totalMinutes,
+    totalDays: totalDays ? parseFloat(totalDays) : null,
+    topDirector: topDirector ? { name: topDirector[0], count: topDirector[1] } : null,
+    topActor: topActor ? { name: topActor[0], count: topActor[1] } : null,
   };
 };
 
+const getBlockedUsers = async (userId) => {
+  const blocked = await prisma.interaction.findMany({
+    where: { fromUserId: userId, type: 'BLOCK' },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      createdAt: true,
+      toUser: {
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          avatar: true,
+          avatarType: true,
+          bio: true,
+          age: true,
+          showAge: true,
+        },
+      },
+    },
+  });
+
+  return blocked.map(({ createdAt, toUser }) => ({
+    ...toUser,
+    age: toUser?.showAge ? toUser.age : null,
+    blockedAt: createdAt,
+  }));
+};
+
+// Public profil icin minimum alan setini doner.
+// `showAge` kapaliysa yas response'tan maskelenir.
 const getPublicProfile = async (userId) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -122,8 +222,9 @@ const getPublicProfile = async (userId) => {
   return user;
 };
 
+// Public profil istatistikleri, private profil ile ayni kurallarla uretilir.
 const getPublicStats = async (userId) => {
-  const [movieCount, matchCount, ratings, topMovies, movieYears] = await Promise.all([
+  const [movieCount, matchCount, ratings, topMovies, allMovies, movieRatings, userMovies] = await Promise.all([
     prisma.userMovie.count({ where: { userId } }),
     prisma.match.count({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] } }),
     prisma.movieRating.findMany({ where: { userId }, select: { rating: true } }),
@@ -133,36 +234,118 @@ const getPublicStats = async (userId) => {
       orderBy: { movie: { id: 'desc' } },
       take: 4,
     }),
-    prisma.userMovie.findMany({ where: { userId }, select: { movie: { select: { year: true } } } }),
+    prisma.userMovie.findMany({
+      where: { userId },
+      select: {
+        movie: {
+          select: { year: true, runtime: true, genres: true, director: true, cast: true },
+        },
+      },
+    }),
+    prisma.movieRating.findMany({
+      where: { userId },
+      select: {
+        movieId: true,
+        rating: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.userMovie.findMany({
+      where: { userId },
+      orderBy: { movie: { id: 'desc' } },
+      select: {
+        movie: {
+          select: {
+            id: true,
+            title: true,
+            poster: true,
+            tmdbId: true,
+            year: true,
+          },
+        },
+      },
+    }),
   ]);
 
   const avgRating = ratings.length > 0
     ? (ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
     : null;
 
+  const genreCounts = {};
+  for (const { movie } of allMovies) {
+    if (!movie.genres) continue;
+    try {
+      const parsed = JSON.parse(movie.genres);
+      for (const g of parsed) genreCounts[g] = (genreCounts[g] || 0) + 1;
+    } catch {}
+  }
+  const topGenres = Object.entries(genreCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([genre, count]) => ({ genre, count }));
+
+  const totalMinutes = allMovies.reduce((sum, { movie }) => sum + (movie.runtime || 0), 0);
+  const totalDays = totalMinutes > 0 ? (totalMinutes / 1440).toFixed(1) : null;
+
+  const directorCounts = {};
+  for (const { movie } of allMovies) {
+    if (!movie.director) continue;
+    directorCounts[movie.director] = (directorCounts[movie.director] || 0) + 1;
+  }
+  const topDirector = Object.entries(directorCounts).sort((a, b) => b[1] - a[1])[0] || null;
+
+  const actorCounts = {};
+  for (const { movie } of allMovies) {
+    if (!movie.cast) continue;
+    try {
+      const parsed = JSON.parse(movie.cast);
+      for (const actor of parsed) actorCounts[actor] = (actorCounts[actor] || 0) + 1;
+    } catch {}
+  }
+  const topActor = Object.entries(actorCounts).sort((a, b) => b[1] - a[1])[0] || null;
+  const ratingsByMovieId = new Map(
+    movieRatings.map((entry) => [
+      entry.movieId,
+      { rating: entry.rating, ratedAt: entry.updatedAt },
+    ])
+  );
+
   return {
     movieCount,
     matchCount,
     avgRating,
-    favoriteEra: computeFavoriteEra(movieYears),
+    favoriteEra: computeFavoriteEra(allMovies),
     topMovies: topMovies.map((um) => um.movie),
+    movies: userMovies.map(({ movie }) => ({
+      ...movie,
+      rating: ratingsByMovieId.get(movie.id)?.rating ?? null,
+      ratedAt: ratingsByMovieId.get(movie.id)?.ratedAt ?? null,
+    })),
     watchStyle: computeWatchStyle(movieCount),
+    topGenres,
+    totalMinutes,
+    totalDays: totalDays ? parseFloat(totalDays) : null,
+    topDirector: topDirector ? { name: topDirector[0], count: topDirector[1] } : null,
+    topActor: topActor ? { name: topActor[0], count: topActor[1] } : null,
   };
 };
 
+// Authenticated kullanicinin tam profilini getirir.
 const fetchProfile = async (userId) => {
   const user = await getProfile(userId);
-  if (!user) throw new ApiError(404, 'Kullanıcı bulunamadı');
+  if (!user) throw new ApiError(404, 'Kullanici bulunamadi');
   return stripPassword(user);
 };
 
+// Profil guncellemesini parcali update mantigiyla yapar.
+// Yeni upload avatar geldiyse eski R2 objesi async olarak temizlenir.
 const updateProfile = async (userId, { name, username, bio, avatar, avatarType, age, showAge }) => {
   if (username) {
     const taken = await isUsernameTaken(username, userId);
-    if (taken) throw new ApiError(409, 'Bu kullanıcı adı zaten alınmış');
+    if (taken) throw new ApiError(409, 'Bu kullanici adi zaten alinmis');
   }
 
-  // Yeni avatar geliyorsa eski R2 dosyasını sil
+  // Yeni avatar geliyorsa eski upload dosyasi best-effort olarak silinir.
   if (avatar) {
     const current = await prisma.user.findUnique({ where: { id: userId }, select: { avatar: true, avatarType: true } });
     if (current?.avatar && current.avatarType === 'upload') {
@@ -176,16 +359,17 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
     ...(bio !== undefined && { bio }),
     ...(avatar !== undefined && { avatar }),
     ...(avatarType !== undefined && { avatarType }),
-    ...(age !== undefined && { age: age ? parseInt(age) : null }),
+    ...(age !== undefined && { age: age ? parseInt(age, 10) : null }),
     ...(showAge !== undefined && { showAge }),
   });
 
   return stripPassword(updated);
 };
 
+// Public profil endpoint'i icin 404 davranisini merkezilesir.
 const fetchPublicProfile = async (userId) => {
   const user = await getPublicProfile(userId);
-  if (!user) throw new ApiError(404, 'Kullanıcı bulunamadı');
+  if (!user) throw new ApiError(404, 'Kullanici bulunamadi');
   return user;
 };
 
@@ -201,6 +385,7 @@ module.exports = {
   stripPassword,
   discoverUsers,
   getProfileStats,
+  getBlockedUsers,
   getPublicProfile,
   getPublicStats,
 };

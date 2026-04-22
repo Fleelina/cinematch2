@@ -3,6 +3,7 @@ const cache = require('../utils/cache');
 const tmdbService = require('./tmdb.service');
 const { ApiError } = require('../middleware/errorHandler');
 
+// Fisher-Yates ile yeni bir dizi uretir; kaynak dizi mutate edilmez.
 function shuffle(items) {
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i -= 1) {
@@ -12,6 +13,34 @@ function shuffle(items) {
   return arr;
 }
 
+// Oneri havuzlarindaki eleme nedenlerini loglar.
+// Debug odaklidir; sonuc setini degistirmez.
+function logSuggestionPool(label, movies, excludedIds, seenIds = new Set()) {
+  const missingPoster = movies.filter((movie) => !movie.poster_path);
+  const excluded = movies.filter((movie) => excludedIds.has(movie.id));
+  const duplicate = movies.filter((movie) => seenIds.has(movie.id));
+
+  console.log(`[suggestions] ${label}`, {
+    total: movies.length,
+    missingPoster: missingPoster.length,
+    excluded: excluded.length,
+    duplicate: duplicate.length,
+  });
+
+  if (missingPoster.length > 0) {
+    console.log(
+      `[suggestions] ${label} missingPoster sample`,
+      missingPoster.slice(0, 5).map((movie) => ({
+        id: movie.id,
+        title: movie.title || movie.original_title,
+        poster_path: movie.poster_path ?? null,
+      }))
+    );
+  }
+}
+
+// Kullaniciya gosterilecek onerileri birden fazla TMDB havuzundan derler.
+// Profil ve watchlist'teki filmler dislanir, postersiz ve duplicate kayitlar elenir.
 const getSuggestions = async (userId) => {
   const [userMovies, watchlist] = await Promise.all([
     prisma.userMovie.findMany({ where: { userId }, include: { movie: true } }),
@@ -35,6 +64,11 @@ const getSuggestions = async (userId) => {
     classicsPage,
   });
 
+  logSuggestionPool('popularOne', popularOne, excludedIds);
+  logSuggestionPool('popularTwo', popularTwo, excludedIds);
+  logSuggestionPool('topRated', topRated, excludedIds);
+  logSuggestionPool('classics', classics, excludedIds);
+
   let similarMovies = [];
   if (userMovies.length > 0) {
     const sample = shuffle(userMovies).slice(0, 3);
@@ -45,7 +79,8 @@ const getSuggestions = async (userId) => {
     );
 
     const seenSimilar = new Set();
-    for (const results of similarSets) {
+    for (const [index, results] of similarSets.entries()) {
+      logSuggestionPool(`similar[${index}]`, results, excludedIds, seenSimilar);
       for (const movie of results) {
         if (!seenSimilar.has(movie.id) && !excludedIds.has(movie.id) && movie.poster_path) {
           seenSimilar.add(movie.id);
@@ -88,6 +123,17 @@ const getSuggestions = async (userId) => {
     ...shuffle(classicMovies).slice(0, 6),
   ];
 
+  console.log('[suggestions] final counts', {
+    userMovies: userMovies.length,
+    watchlist: watchlist.length,
+    excludedIds: excludedIds.size,
+    popularMovies: popularMovies.length,
+    similarMovies: similarMovies.length,
+    topRatedMovies: topRatedMovies.length,
+    classicMovies: classicMovies.length,
+    combined: combined.length,
+  });
+
   const nullPosters = combined.filter(m => !m.poster_path).map(m => ({ id: m.id, title: m.title }));
   if (nullPosters.length > 0) console.log('[POSTER NULL]', nullPosters);
 
@@ -102,6 +148,8 @@ const getSuggestions = async (userId) => {
   }));
 };
 
+// Film detayini TMDB'den alir, kullaniciya ozel local state ile zenginlestirir.
+// Rating ozetleri kisa sureli cache ile tutulur.
 const getMovieDetailWithUserData = async (tmdbId, userId) => {
   const tmdbIdInt = parseInt(tmdbId, 10);
   const tmdbData = await tmdbService.getMovieDetail(tmdbId);
@@ -163,6 +211,8 @@ const getMovieDetailWithUserData = async (tmdbId, userId) => {
   };
 };
 
+// Kullanici yalnizca profiline ekledigi bir filmi puanlayabilir.
+// Upsert sonrasi aggregate tekrar hesaplanir ve cache tazelenir.
 const rateMovie = async (userId, tmdbId, rating) => {
   const userMovie = await prisma.userMovie.findFirst({
     where: {
@@ -199,12 +249,31 @@ const rateMovie = async (userId, tmdbId, rating) => {
   };
 };
 
+// Filmi global movie tablosunda garanti eder, sonra kullanicinin profiline baglar.
+// Iki upsert sayesinde islem idempotent kalir.
 const addToProfile = async (userId, { tmdbId, title, poster, year }) => {
   const tmdbIdInt = parseInt(tmdbId, 10);
+
+  // TMDB'den detay çek (cache'li, genellikle anında döner)
+  let runtime = null;
+  let genres = null;
+  let director = null;
+  let cast = null;
+
+  try {
+    const detail = await tmdbService.getMovieDetail(tmdbIdInt);
+    runtime = detail.runtime || null;
+    genres = detail.genres?.length ? JSON.stringify(detail.genres) : null;
+    director = detail.director || null;
+    cast = detail.cast?.length ? JSON.stringify(detail.cast.map((c) => c.name)) : null;
+  } catch (err) {
+    console.warn('[addToProfile] TMDB detay çekilemedi, alanlar boş kaydedilecek:', err.message);
+  }
+
   const movie = await prisma.movie.upsert({
     where: { tmdbId: tmdbIdInt },
-    update: {},
-    create: { tmdbId: tmdbIdInt, title, poster, year: year ? parseInt(year, 10) : null },
+    update: { runtime, genres, director, cast },
+    create: { tmdbId: tmdbIdInt, title, poster, year: year ? parseInt(year, 10) : null, runtime, genres, director, cast },
   });
 
   await prisma.userMovie.upsert({
@@ -217,6 +286,7 @@ const addToProfile = async (userId, { tmdbId, title, poster, year }) => {
   return { movie, addedByCount };
 };
 
+// Profil-film bagini kaldirir; film kaydini fiziksel olarak silmez.
 const removeFromProfile = async (userId, movieId) => {
   const deleted = await prisma.userMovie.deleteMany({
     where: { userId, movieId },
@@ -227,6 +297,8 @@ const removeFromProfile = async (userId, movieId) => {
   return { success: true };
 };
 
+// TMDB id uzerinden profil kaydini silmek icin kullanilir.
+// Donus degeri, filmi profilinde tutan kullanici sayisidir.
 const removeFromProfileByTmdbId = async (userId, tmdbId) => {
   const movie = await prisma.movie.findUnique({ where: { tmdbId: parseInt(tmdbId, 10) } });
   if (!movie) throw new ApiError(404, 'Film bulunamadı');
@@ -238,6 +310,7 @@ const removeFromProfileByTmdbId = async (userId, tmdbId) => {
   return prisma.userMovie.count({ where: { movieId: movie.id } });
 };
 
+// Kullanicinin profilindeki filmleri alfabetik doner.
 const getMyMovies = async (userId) => {
   const userMovies = await prisma.userMovie.findMany({
     where: { userId },
@@ -248,16 +321,20 @@ const getMyMovies = async (userId) => {
   return userMovies.map((userMovie) => userMovie.movie);
 };
 
+// Arama dogrudan TMDB servisine delegedir.
 const searchMovies = async (query) => tmdbService.searchMovies(query);
 
+// Ceviri islemi TMDB tarafindaki yardimci servise delegedir.
 const translateText = async (text) => tmdbService.translateText(text);
 
+// Watchlist en son eklenen kayit ustte olacak sekilde doner.
 const getWatchlist = (userId) =>
   prisma.watchlist.findMany({
     where: { userId },
     orderBy: { addedAt: 'desc' },
   });
 
+// Ayni film ikinci kez eklenirse yeni kayit acilmaz.
 const addToWatchlist = (userId, { tmdbId, title, poster, year }) =>
   prisma.watchlist.upsert({
     where: { userId_tmdbId: { userId, tmdbId } },
@@ -265,6 +342,7 @@ const addToWatchlist = (userId, { tmdbId, title, poster, year }) =>
     create: { userId, tmdbId, title, poster, year: year ? parseInt(year, 10) : null },
   });
 
+// Sessiz silme davranisi icin deleteMany kullanilir.
 const removeFromWatchlist = (userId, tmdbId) =>
   prisma.watchlist.deleteMany({
     where: { userId, tmdbId: parseInt(tmdbId, 10) },

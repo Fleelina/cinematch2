@@ -1,8 +1,8 @@
-// Basit in-memory cache
-// Her key için { data, expiresAt } saklar
-
+// Basit process-ici TTL cache.
+// Her key icin `{ data, expiresAt }` tutulur.
 const cache = new Map();
 
+// Key varsa ve suresi dolmadiysa cache degerini doner.
 const get = (key) => {
   const item = cache.get(key);
   if (!item) return null;
@@ -13,6 +13,7 @@ const get = (key) => {
   return item.data;
 };
 
+// TTL saniye cinsinden verilir; default 10 dakikadir.
 const set = (key, data, ttlSeconds = 600) => {
   cache.set(key, {
     data,
@@ -20,11 +21,13 @@ const set = (key, data, ttlSeconds = 600) => {
   });
 };
 
+// Tekil key invalidation icin kullanilir.
 const del = (key) => cache.delete(key);
 
+// Tum cache state'ini sifirlar.
 const clear = () => cache.clear();
 
-// Expired item'ları periyodik temizle (memory leak önlemi)
+// Expire olmus kayitlar periyodik temizlenir.
 setInterval(() => {
   const now = Date.now();
   for (const [key, item] of cache.entries()) {
