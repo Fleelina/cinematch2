@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getToken } from './tokenStore';
 
 const SOCKET_URL = 'http://10.0.2.2:3000';
 
@@ -8,7 +8,7 @@ let socket = null;
 export const connectSocket = async () => {
   if (socket?.connected) return socket;
 
-  const token = await AsyncStorage.getItem('token');
+  const token = getToken();
   if (!token) return null;
 
   socket = io(SOCKET_URL, {
@@ -43,9 +43,9 @@ export const disconnectSocket = () => {
   }
 };
 
-export const sendMessage = (matchId, text) => {
+export const sendMessage = (matchId, text, movieId) => {
   if (!socket?.connected) return;
-  socket.emit('send_message', { matchId, text });
+  socket.emit('send_message', { matchId, text, movieId });
 };
 
 export const emitTyping = (matchId) => {

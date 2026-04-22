@@ -1,5 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getToken } from './tokenStore';
 
 const API_URL = 'http://10.0.2.2:3000/api';
 
@@ -11,9 +11,9 @@ const api = axios.create({
   },
 });
 
-// Her istekte token otomatik ekle
-api.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('token');
+// Sync interceptor — no disk I/O, no await, no blocking
+api.interceptors.request.use((config) => {
+  const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
