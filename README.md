@@ -1,47 +1,54 @@
 # 🎬 CineMatch
 
-Film zevkine göre arkadaş bulan mobil uygulama.
+**Film zevkine göre insanları buluşturan mobil uygulama.**
+TMDB entegrasyonu, gerçek zamanlı mesajlaşma ve akıllı eşleştirme algoritmasıyla.
 
 ---
 
 ## Özellikler
 
-- 🎬 Film zevkine göre kullanıcı eşleştirme
-- 🃏 Swipe ile film önerileri (TMDB)
-- 💬 Gerçek zamanlı mesajlaşma (Socket.io)
-- 📋 Sonra izle listesi
-- 🎭 Karakter/oyuncu avatarı (TMDB)
-- 🖼 Profil fotoğrafı (Cloudflare R2)
-- ⭐ CineMatch puan sistemi
+- 🃏 **Swipe eşleştirme** — Tinder benzeri kart sistemiyle kullanıcı keşfi
+- 🎬 **Film bazlı uyum skoru** — Ortak film zevkine göre % uyum hesaplama
+- 🔍 **Keşfet** — TMDB'den trend, klasik ve kişiselleştirilmiş film önerileri
+- 📖 **Film Listem** — İzlediğin filmleri kaydet, infinite scroll ile tüm kategorileri gez
+- 💬 **Gerçek zamanlı mesajlaşma** — Socket.io ile anlık chat, yazıyor bildirimi
+- ❤️ **CineMatch Puanı** — Topluluk oylarıyla oluşan özgün film sıralama sistemi
+- 🎭 **TMDB Profil Avatarı** — Favori oyuncu veya karakteri avatar olarak seç
+- 🖼️ **Fotoğraf yükleme** — Cloudflare R2 destekli profil fotoğrafı
+- 🔔 **Push Bildirimleri** — Expo Notifications ile eşleşme ve mesaj bildirimleri
+- 🚫 **Kullanıcı engelleme** — Engellenen kullanıcılar keşiften çıkar
 
 ---
 
-## Teknolojiler
+## Teknoloji Yığını
 
 | Katman | Teknoloji |
 |---|---|
 | Mobile | React Native + Expo |
 | Backend | Node.js + Express |
 | Realtime | Socket.io |
-| Veritabanı | PostgreSQL + Prisma ORM |
-| Depolama | Cloudflare R2 (avatar/fotoğraf) |
-| Auth | JWT (bcrypt ile hash) |
-| Film API | TMDB |
+| Veritabanı | SQLite / PostgreSQL + Prisma ORM |
+| Depolama | Cloudflare R2 |
+| Auth | JWT + bcrypt |
+| Film Verisi | TMDB API |
+| Validation | Zod |
 
 ---
 
-## Kurulum
+## Başlarken
 
 ### Gereksinimler
+
 - Node.js 18+
-- PostgreSQL veritabanı (Supabase önerilir)
-- TMDB API Key → [themoviedb.org](https://www.themoviedb.org/settings/api)
-- Cloudflare R2 bucket (avatar yüklemek için)
-- Expo Go (telefon)
+- PostgreSQL (ya da Supabase) — geliştirme için SQLite de çalışır
+- [TMDB API anahtarı](https://www.themoviedb.org/settings/api)
+- Cloudflare R2 bucket (avatar/fotoğraf yükleme için)
+- Expo Go uygulaması (iOS / Android)
 
 ---
 
 ### 1. Repoyu klonla
+
 ```bash
 git clone https://github.com/Fleelina/cinematch.git
 cd cinematch
@@ -49,19 +56,21 @@ cd cinematch
 
 ---
 
-### 2. Backend kurulumu
+### 2. Backend
 
 ```bash
 cd backend
 npm install
 ```
 
-`backend/` klasöründe `.env` dosyası oluştur:
+`backend/.env` dosyası oluştur:
+
 ```env
 DATABASE_URL="postgresql://kullanici:sifre@host:5432/cinematch"
 DIRECT_URL="postgresql://kullanici:sifre@host:5432/cinematch"
 JWT_SECRET="buraya_guclu_bir_secret_yaz"
 TMDB_API_KEY="tmdb_api_keyin"
+TMDB_READ_ACCESS_TOKEN="tmdb_read_access_tokenin"
 PORT=3000
 NODE_ENV=development
 
@@ -73,39 +82,117 @@ R2_BUCKET_NAME="bucket_adi"
 R2_PUBLIC_URL="https://pub-xxx.r2.dev"
 ```
 
-> JWT_SECRET için güçlü bir değer üretmek için şunu çalıştır:
+> Güçlü JWT secret üretmek için:
 > ```bash
 > node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 > ```
 
-Veritabanını oluştur:
+Veritabanını hazırla:
+
 ```bash
 npx prisma migrate dev --name init
 npx prisma generate
 ```
 
 Backend'i başlat:
+
 ```bash
 npm run dev
 ```
 
 ---
 
-### 3. Mobile kurulumu
+### 3. Mobile
 
 ```bash
 cd mobile
 npm install
 ```
 
-`mobile/src/services/api.js` ve `mobile/src/services/socket.js` dosyalarındaki URL'leri kendi backend adresinle güncelle.
+`mobile/src/services/api.js` içindeki `API_URL`'i kendi backend adresinle güncelle:
+
+```js
+// Emülatör için
+const API_URL = 'http://10.0.2.2:3000/api';
+
+// Fiziksel cihaz için (backend'in yerel IP'si)
+const API_URL = 'http://192.168.x.x:3000/api';
+```
 
 Expo'yu başlat:
+
 ```bash
 npx expo start
 ```
 
-Telefonda Expo Go uygulamasını aç ve QR kodu tara.
+Telefonda **Expo Go**'yu aç ve QR kodu tara.
+
+---
+
+## Proje Yapısı
+
+```
+cinematch/
+├── backend/
+│   ├── src/
+│   │   ├── controllers/     # İş mantığı
+│   │   ├── routes/          # API endpoint tanımları
+│   │   ├── services/        # TMDB, kullanıcı, film servisleri
+│   │   ├── middleware/      # Auth, validation, hata yönetimi
+│   │   ├── validators/      # Zod şemaları
+│   │   └── utils/           # Cache ve yardımcılar
+│   └── prisma/              # Veritabanı şeması ve migration'lar
+└── mobile/
+    └── src/
+        ├── screens/         # Tüm ekranlar
+        ├── navigation/      # Stack + Tab navigator
+        ├── services/        # API client, socket, token
+        ├── context/         # Global state
+        └── components/      # Paylaşılan bileşenler
+```
+
+---
+
+## API Endpoint'leri
+
+### Auth
+| Method | Endpoint | Açıklama |
+|---|---|---|
+| POST | `/api/auth/register` | Kayıt |
+| POST | `/api/auth/login` | Giriş |
+
+### Kullanıcı
+| Method | Endpoint | Açıklama |
+|---|---|---|
+| GET | `/api/users/profile` | Kendi profili getir |
+| PUT | `/api/users/profile` | Profil güncelle |
+| GET | `/api/users/discover` | Eşleştirme için kullanıcı keşfi |
+| GET | `/api/users/:id/profile` | Başka kullanıcının profili |
+
+### Filmler
+| Method | Endpoint | Açıklama |
+|---|---|---|
+| GET | `/api/movies/my` | Kendi film listesi |
+| POST | `/api/movies/add` | Film ekle |
+| GET | `/api/movies/trending?page=1` | Trend filmler |
+| GET | `/api/movies/suggestions` | Kişiselleştirilmiş öneriler |
+| GET | `/api/movies/top-rated-cinematch` | CineMatch sıralaması |
+| GET | `/api/movies/classics?page=1` | Klasikler |
+| GET | `/api/movies/search?q=...` | Film ara |
+
+### Eşleştirme
+| Method | Endpoint | Açıklama |
+|---|---|---|
+| POST | `/api/matches/like/:id` | Beğen |
+| POST | `/api/matches/dislike/:id` | Atla |
+| DELETE | `/api/matches/undo/:id` | Geri al |
+| GET | `/api/matches` | Eşleşme listesi |
+
+### Mesajlaşma
+| Method | Endpoint | Açıklama |
+|---|---|---|
+| GET | `/api/messages/:matchId` | Mesajları getir |
+| POST | `/api/messages/:matchId` | Mesaj gönder |
 
 ---
 
@@ -113,19 +200,27 @@ Telefonda Expo Go uygulamasını aç ve QR kodu tara.
 
 | Event | Yön | Açıklama |
 |---|---|---|
-| `join_room` | Client → Server | Belirli match odasına katıl |
+| `join_room` | Client → Server | Match odasına katıl |
 | `send_message` | Client → Server | Mesaj gönder |
-| `new_message` | Server → Client | Yeni mesaj bildirimi |
-| `typing` | Client → Server | Yazıyor bildirimi gönder |
-| `stop_typing` | Client → Server | Yazıyor bildirimini durdur |
+| `new_message` | Server → Client | Yeni mesaj |
+| `typing` | Client → Server | Yazıyor bildirimi |
+| `stop_typing` | Client → Server | Yazmayı durdur |
 | `user_typing` | Server → Client | Karşı taraf yazıyor |
-| `user_stop_typing` | Server → Client | Karşı taraf yazmayı durdurdu |
+| `user_stop_typing` | Server → Client | Karşı taraf durdu |
 
 ---
 
-## Güvenlik Notları
+## Güvenlik
 
-- `.env` dosyası asla git'e eklenmez
-- JWT secret en az 48 byte kriptografik rastgele değer olmalı
-- Avatar fotoğrafları Cloudflare R2'de saklanır, veritabanında sadece URL tutulur
-- Şifreler native bcrypt ile hash'lenir (salt rounds: 12)
+- `.env` dosyaları asla commit edilmez
+- JWT secret minimum 48 byte kriptografik rastgele değer olmalı
+- Şifreler bcrypt ile hash'lenir (salt rounds: 12)
+- Avatar ve fotoğraflar Cloudflare R2'de saklanır, veritabanında yalnızca URL tutulur
+- Tüm input'lar Zod şemalarıyla validate edilir
+
+---
+
+## Lisans
+
+MIT
+

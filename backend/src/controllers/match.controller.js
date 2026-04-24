@@ -55,4 +55,10 @@ const unblockUser = asyncHandler(async (req, res) => {
   ok(res, result);
 });
 
-module.exports = { likeUser, dislikeUser, blockUser, getMatches, getLikedMe, getILiked, endMatch, blockMatch, unblockUser };
+const undoInteraction = asyncHandler(async (req, res) => {
+  const { targetUserId } = req.validated.params;
+  const result = await matchService.undoInteraction(req.user.userId, targetUserId);
+  ok(res, result);
+});
+
+module.exports = { likeUser, dislikeUser, blockUser, undoInteraction, getMatches, getLikedMe, getILiked, endMatch, blockMatch, unblockUser };

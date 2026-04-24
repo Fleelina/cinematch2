@@ -1,11 +1,28 @@
 import React, { useState } from 'react';
 import {
   View, Text, Image, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, FlatList, Switch
+  ScrollView, Alert, ActivityIndicator, FlatList, Switch, Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+
+// Yastan dogum tarihine ve tersine ceviri yardimcilari
+const ageToDate = (age) => {
+  if (!age) return new Date();
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - parseInt(age));
+  return d;
+};
+
+const dateToAge = (date) => {
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const m = today.getMonth() - date.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < date.getDate())) age--;
+  return age;
+};
 
 export default function EditProfileScreen({ navigation }) {
   const { user, setUser } = useAuth();
@@ -15,6 +32,8 @@ export default function EditProfileScreen({ navigation }) {
   const [bio, setBio] = useState(user?.bio || '');
   const [age, setAge] = useState(user?.age ? String(user.age) : '');
   const [showAge, setShowAge] = useState(user?.showAge || false);
+  const [birthDate, setBirthDate] = useState(ageToDate(user?.age));
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [avatar, setAvatar] = useState(user?.avatar || null);
   const [avatarType, setAvatarType] = useState(user?.avatarType || null);
 
@@ -93,8 +112,9 @@ export default function EditProfileScreen({ navigation }) {
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Hata', 'Ad boş bırakılamaz'); return; }
-    if (age && (isNaN(parseInt(age)) || parseInt(age) < 13 || parseInt(age) > 120)) {
-      Alert.alert('Hata', 'Geçerli bir yaş gir (13-120)'); return;
+    const computedAge = age ? parseInt(age) : null;
+    if (computedAge !== null && (computedAge < 18 || computedAge > 120)) {
+      Alert.alert('Hata', 'Geçerli bir doğum tarihi gir (18-120 yaş arası)'); return;
     }
     setSaving(true);
     try {
@@ -184,12 +204,44 @@ export default function EditProfileScreen({ navigation }) {
               placeholder="Kendinden bahset..." placeholderTextColor="#555" multiline
             />
 
-            <Text style={styles.label}>Yaş</Text>
-            <TextInput
-              style={styles.input} value={age} onChangeText={setAge}
-              placeholder="Yaşınızı girin" placeholderTextColor="#555"
-              keyboardType="numeric" maxLength={3}
-            />
+            <Text style={styles.label}>Doğum Tarihi</Text>
+            <TouchableOpacity
+              style={styles.datePickerBtn}
+              onPress={() => setShowDatePicker(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.datePickerIcon}>📅</Text>
+              <Text style={styles.datePickerText}>
+                {age ? `${birthDate.toLocaleDateString('tr-TR')}  ·  ${age} yaş` : 'Doğum tarihi seç'}
+              </Text>
+              <Text style={styles.datePickerChevron}>›</Text>
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={birthDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 18))}
+                minimumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 120))}
+                onChange={(event, selectedDate) => {
+                  if (Platform.OS === 'android') setShowDatePicker(false);
+                  if (event.type === 'dismissed') { setShowDatePicker(false); return; }
+                  if (selectedDate) {
+                    setBirthDate(selectedDate);
+                    setAge(String(dateToAge(selectedDate)));
+                  }
+                }}
+              />
+            )}
+            {Platform.OS === 'ios' && showDatePicker && (
+              <TouchableOpacity
+                style={styles.datePickerDone}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <Text style={styles.datePickerDoneText}>Tamam</Text>
+              </TouchableOpacity>
+            )}
 
             <View style={styles.switchRow}>
               <View>
@@ -294,6 +346,20 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, backgroundColor: '#1c1c1c', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#333' },
   switchLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
   switchSubLabel: { color: '#555', fontSize: 12, marginTop: 2 },
+
+  datePickerBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#1c1c1c', borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: '#333', marginBottom: 4,
+  },
+  datePickerIcon: { fontSize: 18 },
+  datePickerText: { flex: 1, color: '#fff', fontSize: 15 },
+  datePickerChevron: { color: '#555', fontSize: 20 },
+  datePickerDone: {
+    marginTop: 8, alignItems: 'center',
+    backgroundColor: '#E50914', borderRadius: 12, paddingVertical: 12,
+  },
+  datePickerDoneText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   avatarTabs: { flexDirection: 'row', backgroundColor: '#1c1c1c', borderRadius: 12, padding: 4, marginBottom: 16 },
   avatarTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   avatarTabActive: { backgroundColor: '#2a2a2a' },

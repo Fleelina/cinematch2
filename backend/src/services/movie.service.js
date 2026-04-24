@@ -177,26 +177,29 @@ const getMovieDetailWithUserData = async (tmdbId, userId) => {
     const statsCacheKey = `movie:stats:${movieInDb.id}`;
     let ratingStats = cache.get(statsCacheKey);
 
-    if (!ratingStats) {
-      ratingStats = await prisma.movieRating.aggregate({
-        where: { movieId: movieInDb.id },
-        _avg: { rating: true },
-        _count: true,
-      });
-      cache.set(statsCacheKey, ratingStats, 30);
-    }
+    const [resolvedStats, userRatingRecord] = await Promise.all([
+      ratingStats
+        ? Promise.resolve(ratingStats)
+        : prisma.movieRating.aggregate({
+            where: { movieId: movieInDb.id },
+            _avg: { rating: true },
+            _count: true,
+          }),
+      prisma.movieRating.findUnique({
+        where: { userId_movieId: { userId, movieId: movieInDb.id } },
+        select: { rating: true },
+      }),
+    ]);
 
-    if (ratingStats._count > 0) {
-      ratingCount = ratingStats._count;
-      cinematchRating = ratingStats._avg.rating
-        ? Math.round(ratingStats._avg.rating * 10) / 10
+    if (!ratingStats) cache.set(statsCacheKey, resolvedStats, 30);
+
+    if (resolvedStats._count > 0) {
+      ratingCount = resolvedStats._count;
+      cinematchRating = resolvedStats._avg.rating
+        ? Math.round(resolvedStats._avg.rating * 10) / 10
         : null;
     }
 
-    const userRatingRecord = await prisma.movieRating.findUnique({
-      where: { userId_movieId: { userId, movieId: movieInDb.id } },
-      select: { rating: true },
-    });
     userRating = userRatingRecord ? userRatingRecord.rating : null;
   }
 
@@ -214,6 +217,10 @@ const getMovieDetailWithUserData = async (tmdbId, userId) => {
 // Kullanici yalnizca profiline ekledigi bir filmi puanlayabilir.
 // Upsert sonrasi aggregate tekrar hesaplanir ve cache tazelenir.
 const rateMovie = async (userId, tmdbId, rating) => {
+  const ratingInt = parseInt(rating, 10);
+  if (!Number.isInteger(ratingInt) || ratingInt < 1 || ratingInt > 10) {
+    throw new ApiError(400, 'Puan 1-10 arasinda tam sayi olmali');
+  }
   const userMovie = await prisma.userMovie.findFirst({
     where: {
       userId,
@@ -228,8 +235,8 @@ const rateMovie = async (userId, tmdbId, rating) => {
 
   await prisma.movieRating.upsert({
     where: { userId_movieId: { userId, movieId } },
-    update: { rating },
-    create: { userId, movieId, rating },
+    update: { rating: ratingInt },
+    create: { userId, movieId, rating: ratingInt },
   });
 
   const cacheKey = `movie:stats:${movieId}`;
@@ -348,6 +355,62 @@ const removeFromWatchlist = (userId, tmdbId) =>
     where: { userId, tmdbId: parseInt(tmdbId, 10) },
   });
 
+const getTrending = async (page = 1) => {
+  const results = await tmdbService.getTrendingPaged(page);
+  return results;
+};
+
+const getTopRatedCinematch = async (page = 1) => {
+  // Sayfa 1'de önce CineMatch DB'den hesaplanan rating'leri dene
+  if (page === 1) {
+    const cacheKey = 'cinematch:top_rated';
+    const cached = cache.get(cacheKey);
+    if (cached) return { movies: cached, hasMore: false };
+
+    const movies = await prisma.movie.findMany({
+      include: {
+        ratings: { select: { rating: true } },
+      },
+    });
+
+    const result = movies
+      .filter((m) => m.ratings.length > 0)
+      .map((m) => {
+        const avg = m.ratings.reduce((sum, r) => sum + r.rating, 0) / m.ratings.length;
+        return {
+          tmdbId: m.tmdbId,
+          title: m.title,
+          poster: m.poster,
+          year: m.year,
+          cinematchRating: Math.round(avg * 10) / 10,
+          ratingCount: m.ratings.length,
+        };
+      })
+      .sort((a, b) => b.cinematchRating - a.cinematchRating)
+      .slice(0, 20);
+
+    if (result.length > 0) {
+      cache.set(cacheKey, result, 300);
+      return { movies: result, hasMore: false };
+    }
+  }
+
+  // DB'de yeterli veri yoksa TMDB'den sayfalı çek — sonucu cache'le
+  const tmdbCacheKey = `cinematch:top_rated:tmdb:page:${page}`;
+  const tmdbCached = cache.get(tmdbCacheKey);
+  if (tmdbCached) return tmdbCached;
+
+  const tmdbMovies = await tmdbService.getTopRatedPaged(page);
+  const result = { movies: tmdbMovies, hasMore: tmdbMovies.length >= 20 };
+  cache.set(tmdbCacheKey, result, 600); // 10 dakika
+  return result;
+};
+
+const getClassics = async (page = 1) => {
+  const movies = await tmdbService.getClassicsPaged(page);
+  return { movies, hasMore: movies.length >= 20 };
+};
+
 module.exports = {
   searchMovies,
   translateText,
@@ -361,4 +424,7 @@ module.exports = {
   getWatchlist,
   addToWatchlist,
   removeFromWatchlist,
+  getTrending,
+  getTopRatedCinematch,
+  getClassics,
 };

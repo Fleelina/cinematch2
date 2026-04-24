@@ -13,6 +13,7 @@ const drawerWidth = screenWidth * 0.72;
 const MENU_ITEMS = [
   { screen: 'MyProfile', icon: '👤', label: 'Profilim' },
   { screen: 'EditProfile', icon: '✏️', label: 'Profili Duzenle' },
+  { screen: 'Stats', icon: '📈', label: 'İstatistiklerim' },
   { screen: 'Watchlist', icon: '📋', label: 'Sonra Izle' },
   { screen: 'Matches', icon: '❤️', label: 'Eslestirmeler' },
 ];

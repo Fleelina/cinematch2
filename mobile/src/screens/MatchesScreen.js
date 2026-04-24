@@ -38,13 +38,12 @@ export default function MatchesScreen({ navigation }) {
         <Text style={styles.emptyEmoji}>🎬</Text>
         <Text style={styles.emptyTitle}>Henüz eşleşmen yok</Text>
         <Text style={styles.emptySub}>
-          Keşfet ekranından beğendiğin kişilere like at!
+          Beğendiğin kişiler seni de beğenince burada görünür.
         </Text>
       </View>
     );
   }
 
-  // Bugün eşleşenleri öne al
   const sorted = [...matches].sort(
     (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
   );
@@ -56,15 +55,12 @@ export default function MatchesScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Eşleşmeler</Text>
-        <Text style={styles.headerSub}>
-          {matches.length} kişiyle ortak film zevkin var
-        </Text>
       </View>
 
       {/* Bugünkü eşleşmeler — yatay scroll */}
       {today.length > 0 && (
         <View style={styles.todaySection}>
-          <Text style={styles.sectionLabel}>Yeni Eşleşmeler</Text>
+          <Text style={styles.sectionLabel}>Yeni</Text>
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -74,13 +70,13 @@ export default function MatchesScreen({ navigation }) {
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.todayCard}
+                activeOpacity={0.8}
                 onPress={() => navigation.navigate('Chat', {
                   matchId: item.matchId, otherUser: item.user,
                 })}
               >
-                <View style={styles.todayAvatarWrap}>
-                  <MatchAvatar user={item.user} size={58} />
-                  <View style={styles.onlineDot} />
+                <View style={styles.todayAvatarRing}>
+                  <MatchAvatar user={item.user} size={54} />
                 </View>
                 <Text style={styles.todayName} numberOfLines={1}>
                   {item.user.name.split(' ')[0]}
@@ -93,14 +89,14 @@ export default function MatchesScreen({ navigation }) {
 
       {/* Tüm eşleşmeler — dikey liste */}
       <View style={styles.listSection}>
-        {older.length > 0 && (
-          <Text style={[styles.sectionLabel, { marginHorizontal: 16 }]}>Tüm Eşleşmeler</Text>
+        {older.length > 0 && today.length > 0 && (
+          <Text style={[styles.sectionLabel, { marginHorizontal: 16, marginBottom: 10 }]}>Önceki</Text>
         )}
         <FlatList
           data={older.length > 0 ? older : sorted}
           keyExtractor={(item) => item.matchId}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: 32 }}
           renderItem={({ item }) => (
             <MatchRow
               item={item}
@@ -118,31 +114,29 @@ export default function MatchesScreen({ navigation }) {
 
 function MatchRow({ item, onPress, onAvatarPress }) {
   const daysAgo = getDaysAgo(item.createdAt);
+  const isNew = isToday(item);
 
   return (
-    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.75}>
       <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.9}>
-        <MatchAvatar user={item.user} size={50} />
+        <View style={isNew ? styles.avatarRingNew : null}>
+          <MatchAvatar user={item.user} size={50} />
+        </View>
       </TouchableOpacity>
 
       <View style={styles.matchInfo}>
         <View style={styles.matchTop}>
           <Text style={styles.matchName}>{item.user.name}</Text>
-          <Text style={styles.matchDate}>{daysAgo}</Text>
+          {isNew
+            ? <View style={styles.newBadge}><Text style={styles.newBadgeText}>Yeni</Text></View>
+            : <Text style={styles.matchDate}>{daysAgo}</Text>
+          }
         </View>
-        {item.user.bio ? (
-          <Text style={styles.matchBio} numberOfLines={1}>{item.user.bio}</Text>
-        ) : (
-          <Text style={styles.matchBioFallback}>Film zevkini paylaş →</Text>
-        )}
+        {item.user.bio
+          ? <Text style={styles.matchBio} numberOfLines={1}>{item.user.bio}</Text>
+          : <Text style={styles.matchBioFallback}>Sohbet başlat →</Text>
+        }
       </View>
-
-      {/* Uyum skoru varsa göster */}
-      {item.matchScore != null && (
-        <View style={styles.scorePill}>
-          <Text style={styles.scorePillText}>%{item.matchScore}</Text>
-        </View>
-      )}
 
       <Text style={styles.chevron}>›</Text>
     </TouchableOpacity>
@@ -201,24 +195,22 @@ const styles = StyleSheet.create({
   },
 
   // Header
-  header: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16 },
+  header: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20 },
   headerTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: Colors.textPrimary },
-  headerSub: { fontSize: 12, color: Colors.textMuted, marginTop: 4 },
 
   // Bugünkü eşleşmeler (yatay)
-  todaySection: { marginBottom: 20 },
+  todaySection: { marginBottom: 24 },
   sectionLabel: {
     fontSize: 10, fontWeight: '700', letterSpacing: 1.2,
     textTransform: 'uppercase', color: Colors.textMuted,
     marginBottom: 12, paddingHorizontal: 16,
   },
   todayCard: { alignItems: 'center', gap: 7, width: 70 },
-  todayAvatarWrap: { position: 'relative' },
-  onlineDot: {
-    position: 'absolute', bottom: 1, right: 1,
-    width: 12, height: 12, borderRadius: 6,
-    backgroundColor: Colors.green,
-    borderWidth: 2, borderColor: Colors.bg,
+  todayAvatarRing: {
+    padding: 2,
+    borderRadius: 100,
+    borderWidth: 2,
+    borderColor: Colors.red,
   },
   todayName: {
     fontSize: 11, color: Colors.textSecondary,
@@ -229,28 +221,34 @@ const styles = StyleSheet.create({
   listSection: { flex: 1 },
   matchCard: {
     flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 16, marginBottom: 10,
+    marginHorizontal: 16, marginBottom: 8,
     backgroundColor: Colors.bgCard,
     borderRadius: Radii.lg, padding: 14,
     borderWidth: 0.5, borderColor: Colors.border,
     gap: 12,
   },
+  avatarRingNew: {
+    padding: 2,
+    borderRadius: 100,
+    borderWidth: 2,
+    borderColor: Colors.red,
+  },
   matchInfo: { flex: 1 },
   matchTop: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 3,
+    alignItems: 'center', marginBottom: 4,
   },
   matchName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
   matchDate: { fontSize: 10, color: Colors.textMuted },
-  matchBio: { fontSize: 12, color: Colors.textSecondary },
-  matchBioFallback: { fontSize: 12, color: Colors.red, fontWeight: '500' },
-  scorePill: {
+  newBadge: {
     backgroundColor: Colors.redDim,
     borderRadius: Radii.pill,
     borderWidth: 0.5, borderColor: Colors.redBorder,
-    paddingHorizontal: 9, paddingVertical: 4,
+    paddingHorizontal: 8, paddingVertical: 3,
   },
-  scorePillText: { fontSize: 11, fontWeight: '800', color: Colors.red },
+  newBadgeText: { fontSize: 10, fontWeight: '800', color: Colors.red },
+  matchBio: { fontSize: 12, color: Colors.textSecondary },
+  matchBioFallback: { fontSize: 12, color: Colors.textMuted },
   chevron: { fontSize: 18, color: Colors.textHint, marginLeft: -4 },
 
   // Boş durum

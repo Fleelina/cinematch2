@@ -240,6 +240,50 @@ const searchPeople = async (query) => {
   return people;
 };
 
+const getTrendingPaged = (page = 1) =>
+  getCachedResults(`trending:week:${page}`, '/trending/movie/week', { page }, 3600).then((results) =>
+    results.filter((m) => m.poster_path).map((m) => ({
+      tmdbId: m.id,
+      title: m.title || m.original_title,
+      poster: `https://image.tmdb.org/t/p/w500${m.poster_path}`,
+      year: m.release_date?.slice(0, 4) || null,
+      rating: m.vote_average ? m.vote_average.toFixed(1) : null,
+    }))
+  );
+
+const getTopRatedPaged = (page = 1) =>
+  getCachedResults(`top_rated:${page}`, '/movie/top_rated', { page }, 3600).then((results) =>
+    results.filter((m) => m.poster_path).map((m) => ({
+      tmdbId: m.id,
+      title: m.title || m.original_title,
+      poster: `https://image.tmdb.org/t/p/w500${m.poster_path}`,
+      year: m.release_date?.slice(0, 4) || null,
+      rating: m.vote_average ? m.vote_average.toFixed(1) : null,
+    }))
+  );
+
+const getClassicsPaged = (page = 1) =>
+  getCachedResults(
+    `classics:${page}`,
+    '/discover/movie',
+    {
+      sort_by: 'vote_average.desc',
+      'primary_release_date.gte': '1970-01-01',
+      'primary_release_date.lte': '2000-12-31',
+      'vote_count.gte': 1000,
+      page,
+    },
+    7200
+  ).then((results) =>
+    results.filter((m) => m.poster_path).map((m) => ({
+      tmdbId: m.id,
+      title: m.title || m.original_title,
+      poster: `https://image.tmdb.org/t/p/w500${m.poster_path}`,
+      year: m.release_date?.slice(0, 4) || null,
+      rating: m.vote_average ? m.vote_average.toFixed(1) : null,
+    }))
+  );
+
 module.exports = {
   searchMovies,
   getMovieDetail,
@@ -248,4 +292,7 @@ module.exports = {
   getSimilarMovies,
   translateText,
   searchPeople,
+  getTrendingPaged,
+  getTopRatedPaged,
+  getClassicsPaged,
 };

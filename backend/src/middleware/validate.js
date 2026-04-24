@@ -8,10 +8,11 @@ const validate = (schema) => (req, res, next) => {
 
   if (!result.success) {
     const firstError = result.error?.errors?.[0];
+    const isDev = process.env.NODE_ENV !== 'production';
     return res.status(400).json({
       success: false,
       error: firstError?.message ?? 'Gecersiz istek',
-      details: result.error?.errors ?? [],
+      ...(isDev && { details: result.error?.errors ?? [] }),
     });
   }
 

@@ -339,7 +339,7 @@ const fetchProfile = async (userId) => {
 
 // Profil guncellemesini parcali update mantigiyla yapar.
 // Yeni upload avatar geldiyse eski R2 objesi async olarak temizlenir.
-const updateProfile = async (userId, { name, username, bio, avatar, avatarType, age, showAge }) => {
+const updateProfile = async (userId, { name, username, bio, avatar, avatarType, age, showAge, gender }) => {
   if (username) {
     const taken = await isUsernameTaken(username, userId);
     if (taken) throw new ApiError(409, 'Bu kullanici adi zaten alinmis');
@@ -361,6 +361,7 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
     ...(avatarType !== undefined && { avatarType }),
     ...(age !== undefined && { age: age ? parseInt(age, 10) : null }),
     ...(showAge !== undefined && { showAge }),
+    ...(gender !== undefined && { gender: gender ?? null }),
   });
 
   return stripPassword(updated);

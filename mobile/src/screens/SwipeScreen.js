@@ -60,6 +60,7 @@ export default function SwipeScreen({ navigation }) {
       setMovies(prefetchedMovies);
       prefetchedMovies = [];
       setLoading(false);
+      position.setValue({ x: 0, y: 0 });
       prefetchMovies();
       return;
     }
@@ -134,6 +135,7 @@ export default function SwipeScreen({ navigation }) {
   const handleAdd = async () => {
     const movie = movies[currentIndex];
     setActionLoading('add');
+    position.setValue({ x: 0, y: 0 });
     setCurrentIndex((p) => p + 1);
     try {
       await api.post('/movies/add', {
@@ -146,6 +148,7 @@ export default function SwipeScreen({ navigation }) {
   const handleWatchlist = async () => {
     const movie = movies[currentIndex];
     setActionLoading('watchlist');
+    position.setValue({ x: 0, y: 0 });
     setCurrentIndex((p) => p + 1);
     try {
       await api.post('/movies/watchlist', {

@@ -21,13 +21,15 @@ const io = new Server(httpServer, {
 setupSocketAuth(io);
 setupSocketHandlers(io);
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\nShutdown başlatılıyor...');
+const gracefulShutdown = async (signal) => {
+  console.log(`\n${signal} alindi, shutdown baslatiliyor...`);
   httpServer.close();
   await disconnectPrisma();
   process.exit(0);
-});
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 // Start server
 httpServer.listen(config.port, () => {

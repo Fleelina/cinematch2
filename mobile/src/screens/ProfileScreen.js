@@ -61,7 +61,13 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           <View style={styles.statsRow}>
-            <StatCard icon="🎬" value={stats?.movieCount ?? 0} label="Film" />
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('MyMovies')}
+            >
+              <StatCard icon="🎬" value={stats?.movieCount ?? 0} label="Film" />
+            </TouchableOpacity>
             <StatCard icon="❤️" value={stats?.matchCount ?? 0} label="Eslesme" />
             <StatCard
               icon="⭐"
@@ -361,22 +367,6 @@ const styles = StyleSheet.create({
     color: Colors.textHint, fontSize: 12, textAlign: 'center',
     padding: 20, fontStyle: 'italic',
   },
-
-  statsCta: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: Colors.bgCard,
-    borderRadius: Radii.lg,
-    borderWidth: 0.5,
-    borderColor: Colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statsCtaText: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
-  statsCtaArrow: { color: Colors.textMuted, fontSize: 20 },
 
   boostCard: {
     marginHorizontal: 16, marginTop: 24,

@@ -1,452 +1,489 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useCallback, useLayoutEffect, useEffect, useRef } from 'react';
 import {
-  View, Text, Image, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Animated, PanResponder, Dimensions, Alert, Pressable,
+  View, Text, ScrollView, FlatList, TextInput, TouchableOpacity,
+  Image, StyleSheet, ActivityIndicator, Alert, Pressable, Animated,
 } from 'react-native';
 import api from '../services/api';
-import { Colors, Radii, Shadows } from '../theme';
+import { Colors, Radii } from '../theme';
 
-const { width: SW, height: SH } = Dimensions.get('window');
-const SWIPE_THRESHOLD = SW * 0.25;
-const CARD_H = SH * 0.56;
+function Poster({ uri, width = 110, height = 160 }) {
+  if (uri) {
+    return <Image source={{ uri }} style={{ width, height, borderRadius: 10, backgroundColor: Colors.bgCard }} />;
+  }
+  return (
+    <View style={{ width, height, borderRadius: 10, backgroundColor: Colors.bgElevated, justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontSize: 28 }}>🎬</Text>
+    </View>
+  );
+}
 
-export default function DiscoverScreen({ navigation }) {
-  const [users, setUsers] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(null);
-  const [round, setRound] = useState(1);
+function SectionHeader({ emoji, title, accent, onViewAll }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderLeft}>
+        <View style={[styles.sectionAccent, { backgroundColor: accent }]} />
+        <Text style={styles.sectionEmoji}>{emoji}</Text>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      <TouchableOpacity onPress={onViewAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.sectionViewAll}>Tümü ›</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
-  const position = useRef(new Animated.ValueXY()).current;
+function MovieCard({ item, onPress, onAdd, showCinematch, isAdded }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const addScale = useRef(new Animated.Value(1)).current;
+  const [added, setAdded] = useState(false);
 
-  useEffect(() => { fetchUsers(); }, []);
+  const isDone = isAdded || added;
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get('/users/discover');
-      setUsers(res.data);
-      setCurrentIndex(0);
-      position.setValue({ x: 0, y: 0 });
-    } catch {
-      Alert.alert('Hata', 'Kullanicilar yuklenemedi');
-    } finally {
-      setLoading(false);
-    }
+  const handlePressIn = () => {
+    Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
   };
 
-  const refresh = async () => {
-    setRound((value) => value + 1);
-    await fetchUsers();
+  const handlePressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 8 }).start();
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gesture) => position.setValue({ x: gesture.dx, y: gesture.dy }),
-      onPanResponderRelease: (_, gesture) => {
-        if (gesture.dx > SWIPE_THRESHOLD) triggerSwipeRight();
-        else if (gesture.dx < -SWIPE_THRESHOLD) triggerSwipeLeft();
-        else Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
-      },
-    })
-  ).current;
-
-  const triggerSwipeRight = () => {
-    Animated.timing(position, {
-      toValue: { x: SW + 100, y: 0 },
-      duration: 280,
-      useNativeDriver: false,
-    }).start(() => {
-      position.setValue({ x: 0, y: 0 });
-      handleLike(users[currentIndex].id);
-    });
+  const handleAdd = () => {
+    if (isDone) return;
+    Animated.sequence([
+      Animated.spring(addScale, { toValue: 1.4, useNativeDriver: true, speed: 50, bounciness: 10 }),
+      Animated.spring(addScale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 6 }),
+    ]).start();
+    onAdd(item)
+      .then(() => {
+        setAdded(true);
+        onPress({ ...item, showRatingPrompt: true });
+      })
+      .catch(() => {});
   };
 
-  const triggerSwipeLeft = () => {
-    Animated.timing(position, {
-      toValue: { x: -SW - 100, y: 0 },
-      duration: 280,
-      useNativeDriver: false,
-    }).start(() => {
-      position.setValue({ x: 0, y: 0 });
-      handleDislike(users[currentIndex].id);
-    });
-  };
+  return (
+    <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={() => onPress(item)}
+      >
+        <View style={styles.cardPosterWrap}>
+          <Poster uri={item.poster} width={115} height={165} />
+          <View style={styles.cardOverlay} />
+          {showCinematch && item.cinematchRating ? (
+            <View style={styles.cinematchBadge}>
+              <Text style={styles.cinematchBadgeText}>❤ {item.cinematchRating}</Text>
+            </View>
+          ) : item.rating ? (
+            <View style={styles.ratingBadge}>
+              <Text style={styles.ratingBadgeText}>⭐ {item.rating}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+      </TouchableOpacity>
+      <Animated.View style={[styles.addFab, isDone && styles.addFabDone, { transform: [{ scale: addScale }] }]}>
+        <TouchableOpacity onPress={handleAdd} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.addFabText}>{isDone ? '✓' : '+'}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
-  const handleLike = async (targetId) => {
-    setActionLoading(targetId);
-    try {
-      const res = await api.post(`/matches/like/${targetId}`);
-      if (res.data.matched) {
-        Alert.alert('Eslestiniz!', 'Ortak film zevkiniz var. Mesaj atmaya baslayin!');
-      }
-    } catch {
-      // intentionally silent
-    } finally {
-      setActionLoading(null);
-      setCurrentIndex((value) => value + 1);
-    }
+function Section({ emoji, title, accent, data, loading, onPress, onAdd, showCinematch, myMovieIds, endpoint, navigation }) {
+  const handleViewAll = () => {
+    navigation.navigate('AllMovies', { endpoint, title, emoji, showCinematch });
   };
-
-  const handleDislike = async (targetId) => {
-    setActionLoading(targetId);
-    try {
-      await api.post(`/matches/dislike/${targetId}`);
-    } catch {
-      // intentionally silent
-    } finally {
-      setActionLoading(null);
-      setCurrentIndex((value) => value + 1);
-    }
-  };
-
-  const rotate = position.x.interpolate({
-    inputRange: [-SW / 2, 0, SW / 2],
-    outputRange: ['-7deg', '0deg', '7deg'],
-    extrapolate: 'clamp',
-  });
-  const likeOpacity = position.x.interpolate({
-    inputRange: [0, SW / 4],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const nopeOpacity = position.x.interpolate({
-    inputRange: [-SW / 4, 0],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
-  const nextScale = position.x.interpolate({
-    inputRange: [-SW, 0, SW],
-    outputRange: [1, 0.93, 1],
-    extrapolate: 'clamp',
-  });
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={Colors.red} size="large" />
-        <Text style={styles.loadingText}>Kisiler yukleniyor...</Text>
+      <View style={styles.section}>
+        <SectionHeader emoji={emoji} title={title} accent={accent} onViewAll={handleViewAll} />
+        <View style={styles.skeletonRow}>
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={styles.skeletonCard} />
+          ))}
+        </View>
       </View>
     );
   }
+  if (!data || data.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <SectionHeader emoji={emoji} title={title} accent={accent} onViewAll={handleViewAll} />
+      <FlatList
+        data={data}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(item) => item.tmdbId?.toString()}
+        contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
+        renderItem={({ item }) => (
+          <MovieCard item={item} onPress={onPress} onAdd={onAdd} showCinematch={showCinematch} isAdded={myMovieIds?.has(item.tmdbId)} />
+        )}
+      />
+    </View>
+  );
+}
 
-  const current = users[currentIndex];
-  const next = users[currentIndex + 1];
+function SearchResultRow({ item, onDetail, onAdd, isAdded }) {
+  const [added, setAdded] = useState(false);
+  const scale = useRef(new Animated.Value(1)).current;
 
-  if (!current) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.doneEmoji}>🎬</Text>
-        <Text style={styles.doneTitle}>Tur {round} tamamlandi!</Text>
-        <Text style={styles.doneSub}>Atlananlar 24 saat sonra tekrar gorunecek</Text>
-        <Pressable style={styles.refreshBtn} onPress={refresh}>
-          <Text style={styles.refreshBtnText}>Yenile</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const isDone = isAdded || added;
+
+  const handleAdd = async () => {
+    if (isDone) return;
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.35, useNativeDriver: true, speed: 50, bounciness: 10 }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 6 }),
+    ]).start();
+    try { await onAdd(item); } catch {}
+    setAdded(true);
+  };
+
+  return (
+    <View style={styles.resultRow}>
+      <TouchableOpacity onPress={() => onDetail(item)}>
+        <Image source={{ uri: item.poster }} style={{ width: 40, height: 58, borderRadius: 8, backgroundColor: Colors.bgCard }} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.resultInfo} onPress={() => onDetail(item)}>
+        <Text style={styles.resultTitle} numberOfLines={1}>{item.title}</Text>
+        {item.year ? <Text style={styles.resultYear}>{item.year}</Text> : null}
+      </TouchableOpacity>
+      <Animated.View style={[styles.addBtn, isDone && styles.addBtnDone, { transform: [{ scale }] }]}>
+        <TouchableOpacity onPress={handleAdd} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.addBtnText}>{isDone ? '✓' : '+'}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
+export default function DiscoverScreen({ navigation }) {
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  const [myMovieIds, setMyMovieIds] = useState(new Set());
+
+  const [trending, setTrending] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [topRated, setTopRated] = useState([]);
+  const [classics, setClassics] = useState([]);
+  const [loadingTrending, setLoadingTrending] = useState(true);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
+  const [loadingTopRated, setLoadingTopRated] = useState(true);
+  const [loadingClassics, setLoadingClassics] = useState(true);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity style={styles.headerActionBtn} onPress={() => navigation.navigate('Watchlist')}>
+          <Text style={styles.headerActionIcon}>📋</Text>
+          <Text style={styles.headerActionText}>Sonra İzle</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
+
+  useEffect(() => {
+    api.get('/movies/my')
+      .then((r) => {
+        const ids = new Set((r.data || []).map((m) => m.tmdbId));
+        setMyMovieIds(ids);
+      })
+      .catch(() => {});
+
+    api.get('/movies/trending')
+      .then((r) => setTrending(r.data?.movies || r.data || []))
+      .catch(() => {})
+      .finally(() => setLoadingTrending(false));
+
+    api.get('/movies/suggestions')
+      .then((r) => setSuggestions((r.data?.movies || r.data || []).slice(0, 15)))
+      .catch(() => {})
+      .finally(() => setLoadingSuggestions(false));
+
+    api.get('/movies/top-rated-cinematch')
+      .then((r) => setTopRated(r.data?.movies || r.data || []))
+      .catch(() => {})
+      .finally(() => setLoadingTopRated(false));
+
+    api.get('/movies/classics')
+      .then((r) => setClassics(r.data?.movies || r.data || []))
+      .catch(() => {})
+      .finally(() => setLoadingClassics(false));
+  }, []);
+
+  const searchMovies = async () => {
+    if (!query.trim()) return;
+    setSearching(true);
+    try {
+      const res = await api.get(`/movies/search?query=${encodeURIComponent(query)}`);
+      setSearchResults(res.data);
+    } catch {
+      Alert.alert('Hata', 'Arama başarısız');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setQuery('');
+    setSearchResults([]);
+  };
+
+  const addMovie = async (movie) => {
+    await api.post('/movies/add', {
+      tmdbId: movie.tmdbId,
+      title: movie.title,
+      poster: movie.poster,
+      year: movie.year,
+    });
+    setMyMovieIds((prev) => new Set([...prev, movie.tmdbId]));
+  };
+
+  const goDetail = (item) => navigation.navigate('MovieDetail', {
+    tmdbId: item.tmdbId,
+    title: item.title,
+    poster: item.poster,
+    year: item.year,
+    showRatingPrompt: item.showRatingPrompt || false,
+  });
+
+  const showSearch = query.length > 0 || searchResults.length > 0 || searching;
 
   return (
     <View style={styles.container}>
-      <View style={styles.cardArea}>
-        {next ? (
-          <Animated.View style={[styles.card, styles.cardBack, { transform: [{ scale: nextScale }] }]}>
-            <UserCardContent user={next} compact />
-          </Animated.View>
-        ) : null}
-
-        <Animated.View
-          style={[
-            styles.card,
-            {
-              transform: [
-                { translateX: position.x },
-                { translateY: position.y },
-                { rotate },
-              ],
-            },
-          ]}
-          {...panResponder.panHandlers}
-        >
-          <Animated.View style={[styles.badge, styles.badgeLike, { opacity: likeOpacity }]}>
-            <Text style={styles.badgeLikeText}>LIKE ♥</Text>
-          </Animated.View>
-          <Animated.View style={[styles.badge, styles.badgeNope, { opacity: nopeOpacity }]}>
-            <Text style={styles.badgeNopeText}>NOPE ✕</Text>
-          </Animated.View>
-
-          <TouchableOpacity
-            activeOpacity={0.95}
-            onPress={() => navigation.navigate('UserProfile', { userId: current.id })}
-          >
-            <UserCardContent user={current} />
+      {/* Search bar — her zaman üstte */}
+      <View style={[styles.searchRow, searchFocused && styles.searchRowFocused]}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Film ara ve profiline ekle..."
+          placeholderTextColor={Colors.textMuted}
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={searchMovies}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
+          returnKeyType="search"
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={clearSearch} style={styles.clearBtn}>
+            <Text style={styles.clearBtnText}>✕</Text>
           </TouchableOpacity>
-        </Animated.View>
-      </View>
-
-      <View style={styles.actions}>
-        <ActionBtn
-          onPress={triggerSwipeLeft}
-          style={styles.skipBtn}
-          disabled={!!actionLoading}
-          label="Atla"
-          icon="✕"
-          iconColor="#ff2840"
-        />
-        <Text style={styles.counter}>{currentIndex + 1} / {users.length}</Text>
-        <ActionBtn
-          onPress={triggerSwipeRight}
-          style={styles.likeBtn}
-          disabled={!!actionLoading}
-          label="Begen"
-          icon="♥"
-          iconColor="#fff"
-        />
-      </View>
-    </View>
-  );
-}
-
-function UserCardContent({ user, compact = false }) {
-  return (
-    <View style={[styles.cardInner, compact && styles.cardInnerCompact]}>
-      <View style={styles.avatarWrap}>
-        {user.avatar ? (
-          <Image source={{ uri: user.avatar }} style={styles.avatarImg} />
-        ) : (
-          <View style={styles.avatarFallback}>
-            <Text style={styles.avatarInitial}>{user.name?.[0]?.toUpperCase()}</Text>
-          </View>
         )}
-        <View style={styles.avatarRing} />
+        <Pressable style={styles.searchBtn} onPress={searchMovies}>
+          <Text style={styles.searchBtnText}>Ara</Text>
+        </Pressable>
       </View>
 
-      <Text style={styles.cardName}>{user.name}</Text>
-      {user.username ? <Text style={styles.cardUsername}>@{user.username}</Text> : null}
-      {!compact && user.bio ? (
-        <Text style={styles.cardBio} numberOfLines={2}>{user.bio}</Text>
-      ) : null}
-
-      {!compact ? (
-        <View style={styles.scoreRow}>
-          <View style={styles.scoreBox}>
-            <Text style={styles.scoreNum}>%{user.matchScore}</Text>
-            <Text style={styles.scoreLabel}>Uyum</Text>
-          </View>
-          <View style={styles.scoreDivider} />
-          <View style={styles.scoreBox}>
-            <Text style={styles.scoreNum}>{user.commonMovies}</Text>
-            <Text style={styles.scoreLabel}>Ortak Film</Text>
-          </View>
+      {/* Arama sonuçları */}
+      {showSearch ? (
+        <View style={styles.resultsBox}>
+          {searching ? (
+            <ActivityIndicator color={Colors.red} style={{ padding: 16 }} />
+          ) : (
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item) => item.tmdbId.toString()}
+              style={{ maxHeight: 260 }}
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={styles.resultSep} />}
+              ListEmptyComponent={
+                query.length > 0 && !searching ? (
+                  <Text style={styles.noResult}>Sonuç bulunamadı</Text>
+                ) : null
+              }
+              renderItem={({ item }) => <SearchResultRow item={item} onDetail={goDetail} onAdd={addMovie} isAdded={myMovieIds.has(item.tmdbId)} />}
+            />
+          )}
         </View>
-      ) : null}
-
-      {!compact && user.movies?.length > 0 ? (
-        <View style={styles.moviesWrap}>
-          <Text style={styles.moviesLabel}>Izledikleri</Text>
-          {user.movies.slice(0, 3).map((movie, index) => (
-            <Text key={`movie-${movie.movieId}-${index}`} style={styles.movieItem}>🎬 {movie.movie?.title}</Text>
-          ))}
-        </View>
-      ) : null}
+      ) : (
+        /* Kategoriler */
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+          <Section
+            emoji="✨"
+            title="Sana Özel"
+            accent={Colors.red}
+            data={suggestions}
+            loading={loadingSuggestions}
+            onPress={goDetail}
+            onAdd={addMovie}
+            myMovieIds={myMovieIds}
+            endpoint="/movies/suggestions"
+            navigation={navigation}
+          />
+          <Section
+            emoji="🔥"
+            title="Haftanın En Popülerleri"
+            accent="#f97316"
+            data={trending}
+            loading={loadingTrending}
+            onPress={goDetail}
+            onAdd={addMovie}
+            myMovieIds={myMovieIds}
+            endpoint="/movies/trending"
+            navigation={navigation}
+          />
+          <Section
+            emoji="❤️"
+            title="CinemaMatch En Yüksek Puanlılar"
+            accent="#e11d48"
+            data={topRated}
+            loading={loadingTopRated}
+            onPress={goDetail}
+            onAdd={addMovie}
+            showCinematch
+            myMovieIds={myMovieIds}
+            endpoint="/movies/top-rated-cinematch"
+            navigation={navigation}
+          />
+          <Section
+            emoji="🎞️"
+            title="Klasikler"
+            accent="#6366f1"
+            data={classics}
+            loading={loadingClassics}
+            onPress={goDetail}
+            onAdd={addMovie}
+            myMovieIds={myMovieIds}
+            endpoint="/movies/classics"
+            navigation={navigation}
+          />
+        </ScrollView>
+      )}
     </View>
   );
 }
 
-function ActionBtn({ onPress, style, disabled, label, icon, iconColor }) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  return (
-    <View style={{ alignItems: 'center', gap: 5 }}>
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <Pressable
-          style={[styles.actionBtn, style]}
-          onPress={onPress}
-          disabled={disabled}
-          onPressIn={() => Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, speed: 50 }).start()}
-          onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        >
-          <Text style={{ fontSize: 26, color: iconColor }}>{icon}</Text>
-        </Pressable>
-      </Animated.View>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </View>
-  );
-}
+// Fotoğraf temasından alınan token'lar
+const T = {
+  bg: '#0d0d14',
+  bgCard: '#13131f',
+  bgElevated: '#1a1a2e',
+  bgInput: 'rgba(255,255,255,0.04)',
+  accent: '#6c5ce7',
+  accentDim: 'rgba(108,92,231,0.15)',
+  accentBorder: 'rgba(108,92,231,0.4)',
+  accentSecondary: '#a29bfe',
+  gold: '#f0b429',
+  textPrimary: '#ffffff',
+  textSecondary: '#8888aa',
+  textMuted: '#444466',
+  border: '#1e1e30',
+  borderLight: '#2a2a40',
+};
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  center: {
-    flex: 1,
-    backgroundColor: Colors.bg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  loadingText: { color: Colors.textMuted, marginTop: 14, fontSize: 13 },
+  container: { flex: 1, backgroundColor: T.bg },
 
-  cardArea: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 16,
-    marginTop: -18,
+  headerActionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginRight: 16, backgroundColor: T.accentDim,
+    borderRadius: Radii.pill, paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: T.accentBorder,
   },
-  card: {
-    position: 'absolute',
-    width: SW - 32,
-    minHeight: CARD_H,
-    borderRadius: Radii.xl,
-    backgroundColor: Colors.bgCard,
-    borderWidth: 0.5,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-    ...Shadows.card,
-  },
-  cardBack: { transform: [{ scale: 0.93 }], opacity: 0.6 },
-  cardInner: {
-    padding: 28,
-    alignItems: 'center',
-  },
-  cardInnerCompact: { padding: 24 },
+  headerActionIcon: { fontSize: 13 },
+  headerActionText: { color: T.accentSecondary, fontSize: 12, fontWeight: '700' },
 
-  badge: {
-    position: 'absolute',
-    top: 22,
-    zIndex: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: Radii.sm,
-    borderWidth: 2,
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginTop: 12, marginBottom: 12,
+    backgroundColor: T.bgInput, borderRadius: Radii.md,
+    borderWidth: 1, borderColor: T.border,
+    paddingLeft: 12, paddingRight: 6, paddingVertical: 4,
   },
-  badgeLike: {
-    left: 14,
-    borderColor: Colors.green,
-    backgroundColor: Colors.greenDim,
-    transform: [{ rotate: '-12deg' }],
+  searchRowFocused: { borderColor: T.accent, backgroundColor: T.accentDim },
+  searchIcon: { fontSize: 14, color: T.textMuted },
+  searchInput: { flex: 1, color: T.textPrimary, fontSize: 14, paddingVertical: 10 },
+  clearBtn: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: T.bgElevated, justifyContent: 'center', alignItems: 'center',
   },
-  badgeLikeText: { color: Colors.green, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
-  badgeNope: {
-    right: 14,
-    borderColor: '#ff2840',
-    backgroundColor: 'rgba(255,40,64,0.12)',
-    transform: [{ rotate: '12deg' }],
+  clearBtnText: { fontSize: 10, color: T.textSecondary },
+  searchBtn: {
+    backgroundColor: T.accent, borderRadius: Radii.md - 2,
+    paddingHorizontal: 14, paddingVertical: 8,
+    shadowColor: T.accent, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
-  badgeNopeText: { color: '#ff2840', fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
+  searchBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 
-  avatarWrap: { position: 'relative', marginBottom: 14 },
-  avatarImg: { width: 88, height: 88, borderRadius: 44 },
-  avatarFallback: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: Colors.red,
-    justifyContent: 'center',
-    alignItems: 'center',
+  resultsBox: {
+    marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: T.bgCard, borderRadius: Radii.lg,
+    borderWidth: 1, borderColor: T.border, overflow: 'hidden',
   },
-  avatarInitial: { color: '#fff', fontSize: 36, fontWeight: '800' },
-  avatarRing: {
-    position: 'absolute',
-    inset: -3,
-    width: 94,
-    height: 94,
-    borderRadius: 47,
-    borderWidth: 1.5,
-    borderColor: Colors.redBorder,
-    top: -3,
-    left: -3,
+  resultRow: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 10 },
+  resultInfo: { flex: 1 },
+  resultTitle: { fontSize: 13, fontWeight: '600', color: T.textPrimary },
+  resultYear: { fontSize: 11, color: T.textMuted, marginTop: 2 },
+  resultSep: { height: 0.5, backgroundColor: T.border, marginHorizontal: 10 },
+  addBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: T.accent, justifyContent: 'center', alignItems: 'center',
   },
+  addBtnDone: {
+    backgroundColor: '#16a34a',
+  },
+  addBtnText: { color: '#fff', fontSize: 20, lineHeight: 22, fontWeight: '700' },
+  noResult: { color: T.textMuted, fontSize: 13, textAlign: 'center', padding: 20 },
 
-  cardName: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    color: Colors.textPrimary,
-    marginBottom: 3,
-    textAlign: 'center',
+  section: { marginTop: 24 },
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginBottom: 12, paddingHorizontal: 16,
+    justifyContent: 'space-between',
   },
-  cardUsername: { fontSize: 12, color: Colors.red, marginBottom: 8, fontWeight: '600' },
-  cardBio: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 16,
-    paddingHorizontal: 8,
-  },
+  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionAccent: { width: 3, height: 18, borderRadius: 2 },
+  sectionEmoji: { fontSize: 16 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.3 },
+  sectionViewAll: { fontSize: 12, color: T.accentSecondary, fontWeight: '600' },
 
-  scoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.bg,
-    borderRadius: Radii.lg,
-    borderWidth: 0.5,
-    borderColor: Colors.border,
-    marginBottom: 18,
-    overflow: 'hidden',
+  card: { width: 115, marginRight: 10, position: 'relative' },
+  cardPosterWrap: {
+    borderRadius: 12, overflow: 'hidden',
+    borderWidth: 1, borderColor: T.border,
   },
-  scoreBox: { flex: 1, paddingVertical: 12, alignItems: 'center' },
-  scoreDivider: { width: 0.5, height: 32, backgroundColor: Colors.border },
-  scoreNum: { fontSize: 22, fontWeight: '800', color: Colors.red, lineHeight: 24 },
-  scoreLabel: {
-    fontSize: 9,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 3,
+  cardOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    height: 60, borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
+    backgroundColor: 'rgba(13,13,20,0.55)',
   },
+  cardTitle: {
+    color: T.textSecondary, fontSize: 11, fontWeight: '600',
+    marginTop: 7, lineHeight: 15,
+  },
+  ratingBadge: {
+    position: 'absolute', top: 7, left: 7,
+    backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 6,
+    paddingHorizontal: 5, paddingVertical: 2,
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+  },
+  ratingBadgeText: { color: T.gold, fontSize: 10, fontWeight: '700' },
+  cinematchBadge: {
+    position: 'absolute', top: 7, left: 7,
+    backgroundColor: 'rgba(108,92,231,0.85)', borderRadius: 6,
+    paddingHorizontal: 5, paddingVertical: 2,
+  },
+  cinematchBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  addFab: {
+    position: 'absolute', top: 7, right: 7,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: T.accent, justifyContent: 'center', alignItems: 'center',
+    shadowColor: T.accent, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5, shadowRadius: 6, elevation: 5,
+  },
+  addFabDone: { backgroundColor: '#16a34a' },
+  addFabText: { color: '#fff', fontSize: 16, lineHeight: 18, fontWeight: '700' },
 
-  moviesWrap: { width: '100%' },
-  moviesLabel: {
-    fontSize: 9,
-    color: Colors.textHint,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 7,
-    textAlign: 'center',
-  },
-  movieItem: { fontSize: 12, color: Colors.textSecondary, marginBottom: 4, textAlign: 'center' },
-
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 36,
-    paddingBottom: 28,
-    paddingTop: 8,
-  },
-  actionBtn: {
-    borderRadius: Radii.pill,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  skipBtn: {
-    width: 62,
-    height: 62,
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,40,64,0.3)',
-  },
-  likeBtn: {
-    width: 68,
-    height: 68,
-    backgroundColor: Colors.red,
-    ...Shadows.red,
-  },
-  actionLabel: { fontSize: 10, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  counter: { fontSize: 12, color: Colors.textHint, minWidth: 40, textAlign: 'center' },
-
-  doneEmoji: { fontSize: 60, marginBottom: 16 },
-  doneTitle: { color: Colors.textPrimary, fontSize: 20, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
-  doneSub: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 28 },
-  refreshBtn: {
-    backgroundColor: Colors.red,
-    borderRadius: Radii.md,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    ...Shadows.red,
-  },
-  refreshBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  skeletonRow: { flexDirection: 'row', paddingLeft: 16, gap: 10 },
+  skeletonCard: { width: 115, height: 165, borderRadius: 12, backgroundColor: T.bgElevated },
 });

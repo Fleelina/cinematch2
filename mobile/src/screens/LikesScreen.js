@@ -93,12 +93,15 @@ export default function LikesScreen({ navigation }) {
   const [iLiked, setILiked] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchLikes = useCallback(async () => {
+  const fetchLikes = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     try {
+      const t0 = Date.now();
       const [likedMeRes, iLikedRes] = await Promise.all([
         api.get('/matches/liked-me'),
         api.get('/matches/i-liked'),
       ]);
+      console.log(`[LikesScreen] API süresi: ${Date.now() - t0}ms`);
 
       setLikedMe(likedMeRes.data || []);
       setILiked(iLikedRes.data || []);
@@ -111,8 +114,10 @@ export default function LikesScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      fetchLikes();
+      const isFirstLoad = likedMe.length === 0 && iLiked.length === 0;
+      // İlk açılışta hemen yükle, sonraki odaklanmalarda arka planda refresh yap
+      fetchLikes(isFirstLoad);
+      return () => {};
     }, [fetchLikes])
   );
 

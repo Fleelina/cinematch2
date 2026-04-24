@@ -78,6 +78,24 @@ const translateText = asyncHandler(async (req, res) => {
   ok(res, { translated });
 });
 
+const getTrending = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const movies = await movieService.getTrending(page);
+  ok(res, { movies, hasMore: movies.length >= 20 });
+});
+
+const getTopRatedCinematch = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const data = await movieService.getTopRatedCinematch(page);
+  ok(res, data);
+});
+
+const getClassics = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const data = await movieService.getClassics(page);
+  ok(res, data);
+});
+
 module.exports = {
   searchMovies,
   getMovieDetail,
@@ -91,4 +109,7 @@ module.exports = {
   addToWatchlist,
   removeFromWatchlist,
   translateText,
+  getTrending,
+  getTopRatedCinematch,
+  getClassics,
 };

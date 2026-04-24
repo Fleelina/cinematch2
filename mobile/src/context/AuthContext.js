@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
-import { setToken, clearToken } from '../services/tokenStore';
+import { setToken, clearToken, setForceLogoutHandler } from '../services/tokenStore';
 
 const AuthContext = createContext();
 
@@ -55,9 +55,15 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('user');
-    clearToken();                        // memory'den temizle
+    clearToken();
     setUser(null);
   };
+
+  // api.js interceptor'u token expire/invalid durumunda bu callback'i cagirir.
+  // AuthContext mount olduktan hemen sonra tokenStore'a register edilir.
+  useEffect(() => {
+    setForceLogoutHandler(logout);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, setUser, loading, login, register, logout }}>

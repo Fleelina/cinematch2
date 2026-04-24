@@ -6,6 +6,9 @@ const validate = require('../middleware/validate');
 const movieValidator = require('../validators/movie.validator');
 
 // Film endpoint'lerinin tamami authenticated kullanici baglaminda calisir.
+router.get('/trending', authMiddleware, movieController.getTrending);
+router.get('/top-rated-cinematch', authMiddleware, movieController.getTopRatedCinematch);
+router.get('/classics', authMiddleware, movieController.getClassics);
 router.get('/search', authMiddleware, validate(movieValidator.searchMovies), movieController.searchMovies);
 router.get('/suggestions', authMiddleware, movieController.getMovieSuggestions);
 router.get('/my', authMiddleware, movieController.getMyMovies);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, Image, ScrollView, StyleSheet,
   TouchableOpacity, ActivityIndicator, Alert, Modal,
@@ -58,19 +58,30 @@ export default function UserProfileScreen({ route, navigation }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profileOptionsVisible, setProfileOptionsVisible] = useState(false);
-  const [blockedIds, setBlockedIds] = useState([]);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [profileRes, statsRes, blockedRes] = await Promise.all([
+        const [profileRes, statsRes] = await Promise.all([
           api.get(`/users/${userId}/profile`),
           api.get(`/users/${userId}/stats`),
-          api.get('/users/profile/blocked'),
         ]);
         setProfile(profileRes.data);
         setStats(statsRes.data);
-        setBlockedIds((blockedRes.data || []).map((item) => item.id));
+        // Blocked durumu profil response'undan geliyorsa oradan al,
+        // yoksa ayri endpoint'ten tek seferlik cek.
+        if (typeof profileRes.data.isBlocked === 'boolean') {
+          setIsBlocked(profileRes.data.isBlocked);
+        } else {
+          api.get('/users/profile/blocked')
+            .then((r) => {
+              const ids = (r.data || []).map((item) => item.id);
+              setIsBlocked(ids.includes(userId));
+            })
+            .catch(() => {});
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -81,29 +92,31 @@ export default function UserProfileScreen({ route, navigation }) {
     fetchAll();
   }, [userId]);
 
-  const isBlocked = useMemo(() => blockedIds.includes(userId), [blockedIds, userId]);
-
   const handleBlockUser = async () => {
     setProfileOptionsVisible(false);
-
+    setBlockLoading(true);
     try {
       await api.post(`/matches/block-user/${userId}`);
-      setBlockedIds((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
+      setIsBlocked(true);
       Alert.alert('Tamam', 'Kullanici engellendi.');
-    } catch (err) {
+    } catch {
       Alert.alert('Hata', 'Kullanici engellenemedi');
+    } finally {
+      setBlockLoading(false);
     }
   };
 
   const handleUnblockUser = async () => {
     setProfileOptionsVisible(false);
-
+    setBlockLoading(true);
     try {
       await api.post(`/matches/unblock/${userId}`);
-      setBlockedIds((prev) => prev.filter((id) => id !== userId));
+      setIsBlocked(false);
       Alert.alert('Tamam', 'Engel kaldirildi.');
-    } catch (err) {
+    } catch {
       Alert.alert('Hata', 'Engel kaldirilamadi');
+    } finally {
+      setBlockLoading(false);
     }
   };
 

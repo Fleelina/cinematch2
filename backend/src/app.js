@@ -17,7 +17,15 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+// Genel JSON limiti — DoS koruması icin dusuk tutulur.
+// Upload endpoint'i kendi 10mb limitini ayri olarak tanimlar.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/upload')) {
+    express.json({ limit: '10mb' })(req, res, next);
+  } else {
+    express.json({ limit: '100kb' })(req, res, next);
+  }
+});
 
 // Routes
 app.use('/api/auth', authRoutes);

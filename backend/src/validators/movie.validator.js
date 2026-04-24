@@ -31,13 +31,17 @@ const addMovie = z.object({
   }),
 });
 
-// Puanlama akisinda rating 1-10 araliginda sayi olmalidir.
+// Puanlama akisinda rating 1-10 araliginda tam sayi olmalidir.
 const rateMovie = z.object({
   params: z.object({
     tmdbId: z.string({ required_error: 'tmdbId gerekli' }),
   }),
   body: z.object({
-    rating: z.number({ required_error: 'Puan gerekli' }).min(1, 'Puan en az 1 olmali').max(10, 'Puan en fazla 10 olabilir'),
+    rating: z
+      .number({ required_error: 'Puan gerekli', invalid_type_error: 'Puan sayi olmali' })
+      .int('Puan tam sayi olmali')
+      .min(1, 'Puan en az 1 olmali')
+      .max(10, 'Puan en fazla 10 olabilir'),
   }),
 });
 

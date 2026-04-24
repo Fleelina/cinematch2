@@ -19,6 +19,7 @@ model User {
   avatarType  String?
   age         Int?
   showAge     Boolean  @default(false)
+  gender      String?  // 'male' | 'female' | null — ileride eslestirme filtresi
   pushToken   String?  // Expo push notification token
   createdAt   DateTime @default(now())
 
@@ -105,6 +106,7 @@ model Interaction {
   @@index([fromUserId])
   @@index([toUserId])
   @@index([fromUserId, type])
+  @@index([toUserId, type])
 }
 
 model Match {

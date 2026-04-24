@@ -24,7 +24,7 @@ const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
 };
 
-const createUserWithMovies = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies }) => {
+const createUserWithMovies = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, gender, movies }) => {
   const hashedPassword = await hashPassword(password);
 
   // Onboarding'den gelen filmler önce tekilleştirilir; var olan kayıtlar tekrar oluşturulmaz.
@@ -65,6 +65,7 @@ const createUserWithMovies = async ({ name, email, password, username, bio, avat
       avatarType: avatarType || null,
       age: age ? parseInt(age) : null,
       showAge: showAge ?? false,
+      gender: gender || null,
       ...(movieData.length > 0 && {
         movies: { create: movieData },
       }),
@@ -94,9 +95,7 @@ const register = async ({ name, email, password, username, bio, avatar, avatarTy
     if (existingUsername) throw new ApiError(409, 'Bu kullanıcı adı zaten alınmış');
   }
 
-  // gender şu an schema'da yok, sadece log'a düşürüyoruz
-  // İleride schema'ya eklenince buraya da eklenir
-  const user = await createUserWithMovies({ name, email, password, username, bio, avatar, avatarType, age, showAge, movies });
+  const user = await createUserWithMovies({ name, email, password, username, bio, avatar, avatarType, age, showAge, gender, movies });
   const token = generateToken(user.id);
 
   // Kayıt tamamlandıktan sonra geçici avatar kalıcı kullanıcı anahtarına taşınır.

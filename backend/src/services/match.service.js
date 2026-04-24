@@ -219,10 +219,21 @@ const endMatch = async (userId, matchId) => {
   if (!match) throw new ApiError(404, 'Eslesme bulunamadi');
 
   const otherUserId = match.user1Id === userId ? match.user2Id : match.user1Id;
+  const now = new Date();
 
   await prisma.$transaction(async (tx) => {
     await tx.match.delete({ where: { id: matchId } });
-    await upsertInteraction(userId, otherUserId, 'DISLIKE', tx);
+
+    // createdAt sifirlaniyor — cooldown bu tarihten itibaren baslar.
+    // upsertInteraction sadece type gunceller, createdAt'e dokunmaz;
+    // bu yuzden burada dogrudan upsert yaziyoruz.
+    await tx.interaction.upsert({
+      where: { fromUserId_toUserId: { fromUserId: userId, toUserId: otherUserId } },
+      update: { type: 'DISLIKE', createdAt: now },
+      create: { fromUserId: userId, toUserId: otherUserId, type: 'DISLIKE', createdAt: now },
+    });
+
+    // Diger taraf LIKE olarak kalmaya devam eder — discover'da gorune bilir.
     await upsertInteraction(otherUserId, userId, 'LIKE', tx);
   });
 
@@ -249,66 +260,93 @@ const unblockUser = async (userId, targetUserId) => {
   return { success: true };
 };
 
-const getLikedMe = async (userId) => {
-  const interactions = await prisma.interaction.findMany({
-    where: { toUserId: userId, type: 'LIKE' },
-    select: {
-      fromUserId: true,
-      createdAt: true,
-      fromUser: { select: { id: true, name: true, avatar: true, avatarType: true, bio: true } },
-    },
-    orderBy: { createdAt: 'desc' },
+// Swipe geri al: sadece LIKE veya DISLIKE silinir.
+// MATCHED veya BLOCK'a dokunulmaz — bunlar geri alinamaz islemler.
+const undoInteraction = async (userId, targetUserId) => {
+  const interaction = await prisma.interaction.findUnique({
+    where: { fromUserId_toUserId: { fromUserId: userId, toUserId: targetUserId } },
   });
 
-  const matchedUserIds = new Set(
-    (await prisma.match.findMany({
+  if (!interaction) return { undone: false, reason: 'not_found' };
+  if (!['LIKE', 'DISLIKE'].includes(interaction.type)) {
+    return { undone: false, reason: 'not_undoable' };
+  }
+
+  await prisma.interaction.delete({
+    where: { fromUserId_toUserId: { fromUserId: userId, toUserId: targetUserId } },
+  });
+
+  return { undone: true };
+};
+
+// Ortak yardımcı: matched + blocked id set'lerini tek seferde çeker
+const getExcludedUserIds = async (userId) => {
+  const [matchRows, blockRows] = await Promise.all([
+    prisma.match.findMany({
       where: { OR: [{ user1Id: userId }, { user2Id: userId }] },
       select: { user1Id: true, user2Id: true },
-    }))
-      .flatMap((match) => [match.user1Id, match.user2Id])
-      .filter((id) => id !== userId)
-  );
+    }),
+    prisma.interaction.findMany({
+      where: { type: 'BLOCK', OR: [{ fromUserId: userId }, { toUserId: userId }] },
+      select: { fromUserId: true, toUserId: true },
+    }),
+  ]);
 
-  const blockedUserIds = await getBlockedUserIdsForUser(userId);
+  const excluded = new Set();
+  matchRows.forEach((m) => {
+    if (m.user1Id !== userId) excluded.add(m.user1Id);
+    if (m.user2Id !== userId) excluded.add(m.user2Id);
+  });
+  blockRows.forEach((b) => {
+    if (b.fromUserId !== userId) excluded.add(b.fromUserId);
+    if (b.toUserId !== userId) excluded.add(b.toUserId);
+  });
+  return excluded;
+};
+
+const getLikedMe = async (userId) => {
+  const [interactions, excluded] = await Promise.all([
+    prisma.interaction.findMany({
+      where: { toUserId: userId, type: 'LIKE' },
+      select: {
+        fromUserId: true,
+        createdAt: true,
+        fromUser: { select: { id: true, name: true, avatar: true, avatarType: true, bio: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    getExcludedUserIds(userId),
+  ]);
 
   return interactions
-    .filter((interaction) => !matchedUserIds.has(interaction.fromUserId))
-    .filter((interaction) => !blockedUserIds.has(interaction.fromUserId))
-    .map((interaction) => ({ ...interaction.fromUser, likedAt: interaction.createdAt }));
+    .filter((i) => !excluded.has(i.fromUserId))
+    .map((i) => ({ ...i.fromUser, likedAt: i.createdAt }));
 };
 
 const getILiked = async (userId) => {
-  const interactions = await prisma.interaction.findMany({
-    where: { fromUserId: userId, type: 'LIKE' },
-    select: {
-      toUserId: true,
-      createdAt: true,
-      toUser: { select: { id: true, name: true, avatar: true, avatarType: true, bio: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  const matchedUserIds = new Set(
-    (await prisma.match.findMany({
-      where: { OR: [{ user1Id: userId }, { user2Id: userId }] },
-      select: { user1Id: true, user2Id: true },
-    }))
-      .flatMap((match) => [match.user1Id, match.user2Id])
-      .filter((id) => id !== userId)
-  );
-
-  const blockedUserIds = await getBlockedUserIdsForUser(userId);
+  const [interactions, excluded] = await Promise.all([
+    prisma.interaction.findMany({
+      where: { fromUserId: userId, type: 'LIKE' },
+      select: {
+        toUserId: true,
+        createdAt: true,
+        toUser: { select: { id: true, name: true, avatar: true, avatarType: true, bio: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    getExcludedUserIds(userId),
+  ]);
 
   return interactions
-    .filter((interaction) => !matchedUserIds.has(interaction.toUserId))
-    .filter((interaction) => !blockedUserIds.has(interaction.toUserId))
-    .map((interaction) => ({ ...interaction.toUser, likedAt: interaction.createdAt }));
+    .filter((i) => !excluded.has(i.toUserId))
+    .map((i) => ({ ...i.toUser, likedAt: i.createdAt }));
 };
 
 module.exports = {
   likeUser,
   dislikeUser,
   blockUser,
+  undoInteraction,
   getMatches,
   getLikedMe,
   getILiked,

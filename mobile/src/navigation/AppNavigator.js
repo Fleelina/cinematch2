@@ -16,9 +16,9 @@ import Step3Profile from '../screens/onboarding/Step3Profile';
 import Step4Photo from '../screens/onboarding/Step4Photo';
 import Step5Movies from '../screens/onboarding/Step5Movies';
 
-import DiscoverScreen from '../screens/DiscoverScreen';
+import MatchmakingScreen from '../screens/MatchmakingScreen';
 import MessagesScreen from '../screens/MessagesScreen';
-import MoviesScreen from '../screens/MoviesScreen';
+import DiscoverScreen from '../screens/DiscoverScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import MovieDetailScreen from '../screens/MovieDetailScreen';
 import PersonScreen from '../screens/PersonScreen';
@@ -33,22 +33,48 @@ import UserProfileScreen from '../screens/UserProfileScreen';
 import StatsScreen from '../screens/StatsScreen';
 import BlockedUsersScreen from '../screens/BlockedUsersScreen';
 import UserMoviesScreen from '../screens/UserMoviesScreen';
+import MyMoviesScreen from '../screens/MyMoviesScreen';
+import AllMoviesScreen from '../screens/AllMoviesScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS = {
-  Kesfet: '🔍',
-  Swipe: '🎥',
+  Swipe: '🔍',
   Filmlerim: '🎬',
   Begeniler: '❤️',
   Mesajlar: '💬',
 };
 
+function CardsIcon({ focused }) {
+  return (
+    <View style={{ width: 26, height: 26, position: 'relative' }}>
+      <View style={{
+        position: 'absolute', top: 4, left: 4,
+        width: 18, height: 22, borderRadius: 4,
+        backgroundColor: focused ? Colors.red : 'transparent',
+        borderWidth: 1.5,
+        borderColor: focused ? Colors.red : '#555',
+        opacity: 0.6,
+      }} />
+      <View style={{
+        position: 'absolute', top: 0, left: 0,
+        width: 18, height: 22, borderRadius: 4,
+        backgroundColor: focused ? Colors.red : 'transparent',
+        borderWidth: 1.5,
+        borderColor: focused ? Colors.red : '#555',
+      }} />
+    </View>
+  );
+}
+
 function TabIcon({ name, focused }) {
   return (
     <View style={{ alignItems: 'center', gap: 3 }}>
-      <Text style={{ fontSize: 21, opacity: focused ? 1 : 0.45 }}>{TAB_ICONS[name]}</Text>
+      {name === 'Eslesmeler'
+        ? <CardsIcon focused={focused} />
+        : <Text style={{ fontSize: 21, opacity: focused ? 1 : 0.45 }}>{TAB_ICONS[name]}</Text>
+      }
       {focused ? (
         <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.red }} />
       ) : null}
@@ -104,10 +130,10 @@ function MainTabs() {
   return (
     <>
       <Tab.Navigator screenOptions={screenOptions}>
-        <Tab.Screen name="Kesfet" component={DiscoverScreen} options={{ title: 'Kesfet' }} />
+        <Tab.Screen name="Filmlerim" component={DiscoverScreen} options={{ title: 'Keşfet' }} />
         <Tab.Screen name="Swipe" component={SwipeScreen} options={{ title: 'Filmler' }} />
-        <Tab.Screen name="Filmlerim" component={MoviesScreen} options={{ title: 'Filmlerim' }} />
-        <Tab.Screen name="Begeniler" component={LikesScreen} options={{ title: 'Begeniler' }} />
+        <Tab.Screen name="Eslesmeler" component={MatchmakingScreen} options={{ title: 'Eşleşmeler' }} />
+        <Tab.Screen name="Begeniler" component={LikesScreen} options={{ title: 'Beğeniler' }} />
         <Tab.Screen name="Mesajlar" component={MessagesScreen} options={{ title: 'Mesajlar', headerShown: false }} />
       </Tab.Navigator>
       <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
@@ -132,6 +158,8 @@ function AppStack() {
       <Stack.Screen name="Stats" component={StatsScreen} />
       <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
       <Stack.Screen name="UserMovies" component={UserMoviesScreen} />
+      <Stack.Screen name="MyMovies" component={MyMoviesScreen} />
+      <Stack.Screen name="AllMovies" component={AllMoviesScreen} options={{ headerShown: true }} />
     </Stack.Navigator>
   );
 }
