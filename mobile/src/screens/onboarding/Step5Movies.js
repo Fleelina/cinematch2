@@ -12,39 +12,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../services/api';
 
 const MIN_MOVIES = 5;
-const TMDB_API_KEY = 'a21c27e5c24785ed3831babc5c0d0d91';
-const TMDB_BASE = 'https://api.themoviedb.org/3';
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w300';
 
-async function tmdbFetch(url, retries = 3) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`[TMDB ${attempt}/${retries}] Fetching: ${url.substring(0, 80)}...`);
-      
-      // AbortController'ı kaldırdık - basit fetch kullan
-      const res = await fetch(url);
-      
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      
-      const json = await res.json();
-      console.log(`✓ [TMDB] Başarılı - ${json.results?.length || 0} film yüklendi`);
-      return json.results || [];
-      
-    } catch (err) {
-      console.warn(`✗ [TMDB ${attempt}/${retries}]`, err.message);
-      // Stack trace ve tüm detayları göster
-      if (err.stack) console.warn('Stack:', err.stack);
-      
-      if (attempt === retries) {
-        console.error(`❌ [TMDB] Tüm denemeler başarısız - sorun:`, err);
-        return [];
-      }
-      
-      // Retry'dan önce kısa bekleme
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+async function fetchPopular(page) {
+  try {
+    const res = await api.get(`/movies/public/popular?page=${page}`);
+    return res.data || [];
+  } catch (err) {
+    console.error('[Popular] fetch failed:', err.message);
+    return [];
+  }
+}
+
+async function fetchSearch(query) {
+  try {
+    const res = await api.get(`/movies/public/search?query=${encodeURIComponent(query)}`);
+    return res.data || [];
+  } catch (err) {
+    console.error('[Search] fetch failed:', err.message);
+    return [];
   }
 }
 
@@ -116,14 +102,10 @@ export default function Step5Movies({ navigation }) {
   }, [count]);
 
   const loadPopular = async (p) => {
-    console.log('loadPopular called with page:', p);
     if (p === 1) { setLoading(true); setLoadError(false); }
     else setLoadingMore(true);
 
-    const url = `${TMDB_BASE}/movie/popular?api_key=${TMDB_API_KEY}&language=tr-TR&page=${p}`;
-    console.log('Fetching from:', url);
-    const results = await tmdbFetch(url);
-    console.log('Results:', results);
+    const results = await fetchPopular(p);
 
     if (p === 1 && results.length === 0) {
       setLoadError(true);
@@ -141,9 +123,15 @@ export default function Step5Movies({ navigation }) {
     if (!q) { clearSearch(); return; }
     setIsSearchMode(true);
     setSearching(true);
-    const url = `${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(q)}&language=tr-TR`;
-    const results = await tmdbFetch(url);
-    setMovies(results);
+    const results = await fetchSearch(q);
+    // Backend searchMovies farklı format döner, normalize et
+    const normalized = results.map((m) => ({
+      id: m.tmdbId || m.id,
+      title: m.title,
+      poster_path: m.poster ? m.poster.replace('https://image.tmdb.org/t/p/w300', '') : null,
+      release_date: m.year ? `${m.year}-01-01` : null,
+    }));
+    setMovies(normalized);
     setSearching(false);
   };
 

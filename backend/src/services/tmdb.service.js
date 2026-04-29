@@ -284,6 +284,17 @@ const getClassicsPaged = (page = 1) =>
     }))
   );
 
+const getPublicPopular = (page = 1) =>
+  getCachedResults(`popular:${page}`, '/movie/popular', { page, language: 'tr-TR' }, 600).then((results) =>
+    results.filter((m) => m.poster_path).map((m) => ({
+      tmdbId: m.id,
+      title: m.title || m.original_title,
+      poster_path: m.poster_path,
+      release_date: m.release_date || null,
+      id: m.id,
+    }))
+  );
+
 module.exports = {
   searchMovies,
   getMovieDetail,
@@ -295,4 +306,5 @@ module.exports = {
   getTrendingPaged,
   getTopRatedPaged,
   getClassicsPaged,
+  getPublicPopular,
 };

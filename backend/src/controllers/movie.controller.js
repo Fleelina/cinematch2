@@ -1,4 +1,5 @@
 const movieService = require('../services/movie.service');
+const tmdbService = require('../services/tmdb.service');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { ok } = require('../utils/response');
 
@@ -96,6 +97,20 @@ const getClassics = asyncHandler(async (req, res) => {
   ok(res, data);
 });
 
+// Onboarding icin auth gerektirmeyen public TMDB proxy
+const getPublicPopular = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const results = await tmdbService.getPublicPopular(page);
+  ok(res, results);
+});
+
+const getPublicSearch = asyncHandler(async (req, res) => {
+  const { query } = req.query;
+  if (!query?.trim()) return ok(res, []);
+  const results = await tmdbService.searchMovies(query);
+  ok(res, results);
+});
+
 module.exports = {
   searchMovies,
   getMovieDetail,
@@ -112,4 +127,7 @@ module.exports = {
   getTrending,
   getTopRatedCinematch,
   getClassics,
+  getPublicPopular,
+  getPublicSearch,
 };
+

@@ -5,6 +5,10 @@ const authMiddleware = require('../middleware/auth.middleware');
 const validate = require('../middleware/validate');
 const movieValidator = require('../validators/movie.validator');
 
+// Onboarding icin auth gerektirmeyen public endpoint'ler
+router.get('/public/popular', movieController.getPublicPopular);
+router.get('/public/search', movieController.getPublicSearch);
+
 // Film endpoint'lerinin tamami authenticated kullanici baglaminda calisir.
 router.get('/trending', authMiddleware, movieController.getTrending);
 router.get('/top-rated-cinematch', authMiddleware, movieController.getTopRatedCinematch);
