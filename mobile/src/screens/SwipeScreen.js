@@ -35,9 +35,21 @@ export default function SwipeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
 
+  // Her zaman güncel değeri tutan ref — closure sorununun çözümü
+  const currentIndexRef = useRef(0);
+  const moviesRef = useRef([]);
+
   const position = useRef(new Animated.ValueXY()).current;
 
   useEffect(() => { loadMovies(); }, []);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  useEffect(() => {
+    moviesRef.current = movies;
+  }, [movies]);
 
   useEffect(() => {
     const remaining = movies.length - currentIndex;
@@ -49,7 +61,6 @@ export default function SwipeScreen({ navigation }) {
       position.setValue({ x: 0, y: 0 });
       prefetchMovies();
     } else if (remaining === 0 && !isFetching) {
-      // prefetch henüz bitmedi, bitince otomatik yükle
       prefetchMovies(() => loadMovies());
     }
   }, [currentIndex, movies.length]);
@@ -115,25 +126,32 @@ export default function SwipeScreen({ navigation }) {
   ).current;
 
   const triggerSwipeRight = () => {
+    // Ref'ten oku — closure'dan değil
+    const movie = moviesRef.current[currentIndexRef.current];
+    if (!movie) return;
     Animated.timing(position, {
       toValue: { x: SW + 100, y: 0 }, duration: 260, useNativeDriver: false,
-    }).start(() => { position.setValue({ x: 0, y: 0 }); handleAdd(); });
+    }).start(() => { position.setValue({ x: 0, y: 0 }); handleAdd(movie); });
   };
 
   const triggerSwipeLeft = () => {
+    const movie = moviesRef.current[currentIndexRef.current];
+    if (!movie) return;
     Animated.timing(position, {
       toValue: { x: -SW - 100, y: 0 }, duration: 260, useNativeDriver: false,
     }).start(() => { position.setValue({ x: 0, y: 0 }); setCurrentIndex((p) => p + 1); });
   };
 
   const triggerSwipeUp = () => {
+    const movie = moviesRef.current[currentIndexRef.current];
+    if (!movie) return;
     Animated.timing(position, {
       toValue: { x: 0, y: -SH }, duration: 260, useNativeDriver: false,
-    }).start(() => { position.setValue({ x: 0, y: 0 }); handleWatchlist(); });
+    }).start(() => { position.setValue({ x: 0, y: 0 }); handleWatchlist(movie); });
   };
 
-  const handleAdd = async () => {
-    const movie = movies[currentIndex];
+  const handleAdd = async (movie) => {
+    if (!movie) return;
     setActionLoading('add');
     position.setValue({ x: 0, y: 0 });
     setCurrentIndex((p) => p + 1);
@@ -145,8 +163,8 @@ export default function SwipeScreen({ navigation }) {
     finally { setActionLoading(null); }
   };
 
-  const handleWatchlist = async () => {
-    const movie = movies[currentIndex];
+  const handleWatchlist = async (movie) => {
+    if (!movie) return;
     setActionLoading('watchlist');
     position.setValue({ x: 0, y: 0 });
     setCurrentIndex((p) => p + 1);
@@ -156,6 +174,17 @@ export default function SwipeScreen({ navigation }) {
       });
     } catch { /* sessizce geç */ }
     finally { setActionLoading(null); }
+  };
+
+  // Buton handler'ları — ref kullanır
+  const handleAddBtn = () => {
+    const movie = moviesRef.current[currentIndexRef.current];
+    handleAdd(movie);
+  };
+
+  const handleWatchlistBtn = () => {
+    const movie = moviesRef.current[currentIndexRef.current];
+    handleWatchlist(movie);
   };
 
   // Interpolations
@@ -195,7 +224,6 @@ export default function SwipeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerLogo}>CineMatch</Text>
         <View style={styles.headerActions}>
@@ -220,16 +248,13 @@ export default function SwipeScreen({ navigation }) {
 
       <Text style={styles.hint}>← Atla  ·  Ekle →  ·  ↑ Sonra İzle</Text>
 
-      {/* Kartlar */}
       <View style={styles.cardArea}>
-        {/* 3. kart (en arka) */}
         {third && (
           <View style={[styles.card, styles.cardThird]}>
             <Image source={{ uri: third.poster }} style={styles.cardImage} blurRadius={3} />
           </View>
         )}
 
-        {/* 2. kart */}
         {next && (
           <Animated.View style={[styles.card, styles.cardSecond, { transform: [{ scale: nextScale }] }]}>
             <Image source={{ uri: next.poster }} style={styles.cardImage} />
@@ -240,7 +265,6 @@ export default function SwipeScreen({ navigation }) {
           </Animated.View>
         )}
 
-        {/* 1. kart (aktif) */}
         <Animated.View
           style={[styles.card, {
             transform: [
@@ -254,7 +278,6 @@ export default function SwipeScreen({ navigation }) {
           <Image source={{ uri: current.poster }} style={styles.cardImage} />
           <View style={styles.cardGradient} />
 
-          {/* Swipe badge'leri */}
           <Animated.View style={[styles.badge, styles.badgeLike, { opacity: likeOpacity }]}>
             <Text style={styles.badgeLikeText}>EKLE ♥</Text>
           </Animated.View>
@@ -265,7 +288,6 @@ export default function SwipeScreen({ navigation }) {
             <Text style={styles.badgeWatchText}>SONRA ⊕</Text>
           </Animated.View>
 
-          {/* Kart bilgileri */}
           <View style={styles.cardFooter}>
             <View style={styles.pillRow}>
               {current.rating && (
@@ -300,7 +322,6 @@ export default function SwipeScreen({ navigation }) {
         </Animated.View>
       </View>
 
-      {/* Aksiyon butonları */}
       <View style={styles.actions}>
         <ActionButton
           onPress={triggerSwipeLeft}
@@ -309,14 +330,14 @@ export default function SwipeScreen({ navigation }) {
           iconStyle={{ color: '#ff2840', fontSize: 20 }}
         />
         <ActionButton
-          onPress={triggerSwipeUp}
+          onPress={handleWatchlistBtn}
           style={styles.watchlistBtn}
           loading={actionLoading === 'watchlist'}
           icon="⊕"
           iconStyle={{ color: Colors.gold, fontSize: 22 }}
         />
         <ActionButton
-          onPress={triggerSwipeRight}
+          onPress={handleAddBtn}
           style={styles.addBtn}
           loading={actionLoading === 'add'}
           icon="♥"
@@ -358,8 +379,6 @@ const styles = StyleSheet.create({
   doneEmoji: { fontSize: 60, marginBottom: 16 },
   doneTitle: { color: Colors.textPrimary, fontSize: 20, fontWeight: '800', marginBottom: 6 },
   doneSub: { color: Colors.textSecondary, fontSize: 13 },
-
-  // Header
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingTop: 14,
@@ -375,13 +394,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   headerBtnText: { fontSize: 15, color: Colors.textSecondary },
-
   hint: {
     color: Colors.textHint, fontSize: 10, textAlign: 'center',
     marginTop: 6, letterSpacing: 0.5,
   },
-
-  // Kartlar
   cardArea: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     marginHorizontal: 14, marginTop: 4,
@@ -395,22 +411,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgCard,
     ...Shadows.card,
   },
-  cardSecond: {
-    transform: [{ scale: 0.93 }],
-    opacity: 0.75,
-  },
-  cardThird: {
-    transform: [{ scale: 0.86 }],
-    opacity: 0.4,
-  },
+  cardSecond: { transform: [{ scale: 0.93 }], opacity: 0.75 },
+  cardThird: { transform: [{ scale: 0.86 }], opacity: 0.4 },
   cardImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   cardGradient: {
     position: 'absolute', bottom: 0, left: 0, right: 0, height: '58%',
     backgroundColor: 'rgba(0,0,0,0.01)',
     borderBottomLeftRadius: Radii.xl, borderBottomRightRadius: Radii.xl,
   },
-
-  // Swipe badge'leri
   badge: {
     position: 'absolute', top: 26, flexDirection: 'row',
     paddingVertical: 7, paddingHorizontal: 16,
@@ -431,17 +439,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.goldDim,
   },
   badgeWatchText: { color: Colors.gold, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
-
-  // Kart footer
   cardFooter: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     padding: 18,
     backgroundColor: 'rgba(5,5,12,0.75)',
     borderBottomLeftRadius: Radii.xl, borderBottomRightRadius: Radii.xl,
   },
-  nextCardTitle: {
-    color: Colors.textSecondary, fontSize: 16, fontWeight: '700',
-  },
+  nextCardTitle: { color: Colors.textSecondary, fontSize: 16, fontWeight: '700' },
   pillRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
   pill: { paddingVertical: 3, paddingHorizontal: 10, borderRadius: Radii.pill },
   pillRating: { backgroundColor: Colors.goldDim, borderWidth: 0.5, borderColor: 'rgba(240,180,41,0.4)' },
@@ -454,9 +458,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary, fontSize: 21, fontWeight: '800',
     marginBottom: 5, letterSpacing: -0.3,
   },
-  cardOverview: {
-    color: 'rgba(255,255,255,0.55)', fontSize: 12, lineHeight: 17, marginBottom: 10,
-  },
+  cardOverview: { color: 'rgba(255,255,255,0.55)', fontSize: 12, lineHeight: 17, marginBottom: 10 },
   detailBtn: {
     alignSelf: 'flex-start',
     backgroundColor: Colors.redDim,
@@ -465,15 +467,11 @@ const styles = StyleSheet.create({
     borderWidth: 0.5, borderColor: Colors.redBorder,
   },
   detailBtnText: { color: Colors.red, fontSize: 11, fontWeight: '700' },
-
-  // Aksiyon butonları
   actions: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
     gap: 14, paddingTop: 10, paddingBottom: 6,
   },
-  actionBtn: {
-    borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center',
-  },
+  actionBtn: { borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center' },
   skipBtn: {
     width: 52, height: 52,
     backgroundColor: Colors.bgCard,
@@ -489,7 +487,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.red,
     ...Shadows.red,
   },
-  counter: {
-    color: Colors.textHint, fontSize: 10, textAlign: 'center', paddingBottom: 10,
-  },
+  counter: { color: Colors.textHint, fontSize: 10, textAlign: 'center', paddingBottom: 10 },
 });
