@@ -279,7 +279,7 @@ const addToProfile = async (userId, { tmdbId, title, poster, year }) => {
 
   const movie = await prisma.movie.upsert({
     where: { tmdbId: tmdbIdInt },
-    update: { runtime, genres, director, cast },
+    update: { title, poster, year: year ? parseInt(year, 10) : null, runtime, genres, director, cast },
     create: { tmdbId: tmdbIdInt, title, poster, year: year ? parseInt(year, 10) : null, runtime, genres, director, cast },
   });
 
