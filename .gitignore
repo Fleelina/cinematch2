@@ -28,3 +28,11 @@ npm-debug.log*
 /prisma.config.ts
 /package.json
 /package-lock.json
+
+# Package lock dosyaları
+backend/package-lock.json
+mobile/package-lock.json
+
+# Servis dosyaları
+mobile/src/services/api.js
+mobile/src/services/socket.js
