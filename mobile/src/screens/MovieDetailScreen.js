@@ -58,6 +58,8 @@ export default function MovieDetailScreen({ route, navigation }) {
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [inWatchlist, setInWatchlist] = useState(false);
   const [ratingLoading, setRatingLoading] = useState(false);
   const [overviewTranslated, setOverviewTranslated] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -76,6 +78,11 @@ export default function MovieDetailScreen({ route, navigation }) {
 
   useEffect(() => { fetchDetail(); }, [tmdbId]);
 
+  // Film yüklenince watchlist durumunu sync et
+  useEffect(() => {
+    if (movie) setInWatchlist(!!movie.isInWatchlist);
+  }, [movie]);
+
   useEffect(() => {
     if (showRatingPrompt && movie && !movie.userRating) {
       setTimeout(() => {
@@ -87,6 +94,24 @@ export default function MovieDetailScreen({ route, navigation }) {
       }, 400);
     }
   }, [showRatingPrompt, movie]);
+
+  const handleWatchlist = async () => {
+    if (inWatchlist) return;
+    setWatchlistLoading(true);
+    try {
+      await api.post('/movies/watchlist', {
+        tmdbId: movie.tmdbId,
+        title: movie.title,
+        poster: movie.poster,
+        year: movie.year,
+      });
+      setInWatchlist(true);
+    } catch (err) {
+      Alert.alert('Hata', err.response?.data?.error || 'Eklenemedi');
+    } finally {
+      setWatchlistLoading(false);
+    }
+  };
 
   const handleToggle = async () => {
     if (!movie) return;
@@ -103,6 +128,11 @@ export default function MovieDetailScreen({ route, navigation }) {
           year: movie.year,
         });
         setMovie(prev => ({ ...prev, isAdded: true, addedByCount: res.data.addedByCount }));
+        // Watchlist'teyse otomatik kaldır
+        if (inWatchlist) {
+          try { await api.delete(`/movies/watchlist/${movie.tmdbId}`); } catch {}
+          setInWatchlist(false);
+        }
       }
     } catch (err) {
       Alert.alert('Hata', 'İşlem başarısız');
@@ -253,7 +283,7 @@ export default function MovieDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Ekle / Çıkar Butonu */}
+        {/* Ekle / Çıkar + Daha Sonra İzle */}
         <TouchableOpacity
           style={[styles.toggleBtn, movie.isAdded && styles.toggleBtnAdded]}
           onPress={handleToggle}
@@ -262,10 +292,22 @@ export default function MovieDetailScreen({ route, navigation }) {
           {actionLoading
             ? <ActivityIndicator color="#fff" />
             : <Text style={styles.toggleBtnText}>
-                {movie.isAdded ? '✓ Filmlerimden Çıkar' : '+ Filmlerime Ekle'}
+                {movie.isAdded ? '✓ Koleksiyonumdan Çıkar' : '+ Koleksiyonuma Ekle'}
               </Text>
           }
         </TouchableOpacity>
+        {!movie.isAdded && (
+          <TouchableOpacity
+            style={[styles.watchlistBtn, inWatchlist && styles.watchlistBtnDone]}
+            onPress={handleWatchlist}
+            disabled={watchlistLoading || inWatchlist}
+          >
+            {watchlistLoading
+              ? <ActivityIndicator color="#ccc" size="small" />
+              : <Text style={styles.watchlistBtnText}>{inWatchlist ? '⏱ İzle listeme eklendi' : '⏱ İzle listeme ekle'}</Text>
+            }
+          </TouchableOpacity>
+        )}
         <Text style={styles.addedByText}>
           {movie.addedByCount > 0
             ? `${movie.addedByCount} kişi tarafından eklendi`
@@ -422,6 +464,12 @@ const styles = StyleSheet.create({
   },
   toggleBtnAdded: { backgroundColor: '#333', borderWidth: 1, borderColor: '#555' },
   toggleBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  watchlistBtn: {
+    borderRadius: 12, padding: 12, alignItems: 'center', marginBottom: 8,
+    borderWidth: 1, borderColor: '#444', backgroundColor: 'transparent',
+  },
+  watchlistBtnDone: { borderColor: '#2a2a2a', opacity: 0.6 },
+  watchlistBtnText: { color: '#ccc', fontWeight: '600', fontSize: 14 },
   addedByText: { color: '#888', fontSize: 12, textAlign: 'center', marginBottom: 20 },
 
   // CineMatch Puanı

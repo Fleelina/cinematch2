@@ -1,21 +1,22 @@
-import React, { useState, useCallback, useLayoutEffect, useEffect, useRef } from 'react';
+import React, { useState, useLayoutEffect, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, FlatList, TextInput, TouchableOpacity,
-  Image, StyleSheet, ActivityIndicator, Alert, Pressable, Animated,
+  Image, StyleSheet, ActivityIndicator, Animated,
 } from 'react-native';
 import api from '../services/api';
 import { Colors, Radii } from '../theme';
 
-function Poster({ uri, width = 110, height = 160 }) {
-  if (uri) {
-    return <Image source={{ uri }} style={{ width, height, borderRadius: 10, backgroundColor: Colors.bgCard }} />;
-  }
-  return (
-    <View style={{ width, height, borderRadius: 10, backgroundColor: Colors.bgElevated, justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ fontSize: 28 }}>🎬</Text>
-    </View>
-  );
-}
+const T = {
+  bg: '#08080f',
+  bgCard: '#0f0f1a',
+  bgElevated: '#161624',
+  bgInput: 'rgba(255,255,255,0.05)',
+  textPrimary: '#ffffff',
+  textSecondary: '#8888aa',
+  textMuted: '#44445a',
+  border: '#1a1a2a',
+};
 
 function SectionHeader({ emoji, title, accent, onViewAll }) {
   return (
@@ -36,16 +37,7 @@ function MovieCard({ item, onPress, onAdd, showCinematch, isAdded }) {
   const scale = useRef(new Animated.Value(1)).current;
   const addScale = useRef(new Animated.Value(1)).current;
   const [added, setAdded] = useState(false);
-
   const isDone = isAdded || added;
-
-  const handlePressIn = () => {
-    Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 8 }).start();
-  };
 
   const handleAdd = () => {
     if (isDone) return;
@@ -53,33 +45,26 @@ function MovieCard({ item, onPress, onAdd, showCinematch, isAdded }) {
       Animated.spring(addScale, { toValue: 1.4, useNativeDriver: true, speed: 50, bounciness: 10 }),
       Animated.spring(addScale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 6 }),
     ]).start();
-    onAdd(item)
-      .then(() => {
-        setAdded(true);
-        onPress({ ...item, showRatingPrompt: true });
-      })
-      .catch(() => {});
+    onAdd(item).then(() => { setAdded(true); onPress({ ...item, showRatingPrompt: true }); }).catch(() => {});
   };
 
   return (
     <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
       <TouchableOpacity
         activeOpacity={1}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, speed: 50, bounciness: 4 }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 8 }).start()}
         onPress={() => onPress(item)}
       >
         <View style={styles.cardPosterWrap}>
-          <Poster uri={item.poster} width={115} height={165} />
-          <View style={styles.cardOverlay} />
+          {item.poster
+            ? <Image source={{ uri: item.poster }} style={styles.cardImage} />
+            : <View style={[styles.cardImage, styles.cardImageFallback]}><Text style={{ fontSize: 28 }}>🎬</Text></View>
+          }
           {showCinematch && item.cinematchRating ? (
-            <View style={styles.cinematchBadge}>
-              <Text style={styles.cinematchBadgeText}>❤ {item.cinematchRating}</Text>
-            </View>
+            <View style={styles.cinematchBadge}><Text style={styles.cinematchBadgeText}>❤ {item.cinematchRating}</Text></View>
           ) : item.rating ? (
-            <View style={styles.ratingBadge}>
-              <Text style={styles.ratingBadgeText}>⭐ {item.rating}</Text>
-            </View>
+            <View style={styles.ratingBadge}><Text style={styles.ratingBadgeText}>⭐ {item.rating}</Text></View>
           ) : null}
         </View>
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
@@ -94,18 +79,12 @@ function MovieCard({ item, onPress, onAdd, showCinematch, isAdded }) {
 }
 
 function Section({ emoji, title, accent, data, loading, onPress, onAdd, showCinematch, myMovieIds, endpoint, navigation }) {
-  const handleViewAll = () => {
-    navigation.navigate('AllMovies', { endpoint, title, emoji, showCinematch });
-  };
-
   if (loading) {
     return (
       <View style={styles.section}>
-        <SectionHeader emoji={emoji} title={title} accent={accent} onViewAll={handleViewAll} />
+        <SectionHeader emoji={emoji} title={title} accent={accent} onViewAll={() => {}} />
         <View style={styles.skeletonRow}>
-          {[1, 2, 3].map((i) => (
-            <View key={i} style={styles.skeletonCard} />
-          ))}
+          {[1, 2, 3].map((i) => <View key={i} style={styles.skeletonCard} />)}
         </View>
       </View>
     );
@@ -113,11 +92,12 @@ function Section({ emoji, title, accent, data, loading, onPress, onAdd, showCine
   if (!data || data.length === 0) return null;
   return (
     <View style={styles.section}>
-      <SectionHeader emoji={emoji} title={title} accent={accent} onViewAll={handleViewAll} />
+      <SectionHeader
+        emoji={emoji} title={title} accent={accent}
+        onViewAll={() => navigation.navigate('AllMovies', { endpoint, title, emoji, showCinematch })}
+      />
       <FlatList
-        data={data}
-        horizontal
-        showsHorizontalScrollIndicator={false}
+        data={data} horizontal showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.tmdbId?.toString()}
         contentContainerStyle={{ paddingLeft: 16, paddingRight: 8 }}
         renderItem={({ item }) => (
@@ -131,7 +111,6 @@ function Section({ emoji, title, accent, data, loading, onPress, onAdd, showCine
 function SearchResultRow({ item, onDetail, onAdd, isAdded }) {
   const [added, setAdded] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
-
   const isDone = isAdded || added;
 
   const handleAdd = async () => {
@@ -147,7 +126,10 @@ function SearchResultRow({ item, onDetail, onAdd, isAdded }) {
   return (
     <View style={styles.resultRow}>
       <TouchableOpacity onPress={() => onDetail(item)}>
-        <Image source={{ uri: item.poster }} style={{ width: 40, height: 58, borderRadius: 8, backgroundColor: Colors.bgCard }} />
+        {item.poster
+          ? <Image source={{ uri: item.poster }} style={styles.resultPoster} />
+          : <View style={[styles.resultPoster, { backgroundColor: T.bgElevated, justifyContent: 'center', alignItems: 'center' }]}><Text>🎬</Text></View>
+        }
       </TouchableOpacity>
       <TouchableOpacity style={styles.resultInfo} onPress={() => onDetail(item)}>
         <Text style={styles.resultTitle} numberOfLines={1}>{item.title}</Text>
@@ -167,9 +149,9 @@ export default function DiscoverScreen({ navigation }) {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
+  const debounceRef = useRef(null);
 
   const [myMovieIds, setMyMovieIds] = useState(new Set());
-
   const [trending, setTrending] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [topRated, setTopRated] = useState([]);
@@ -183,92 +165,79 @@ export default function DiscoverScreen({ navigation }) {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity style={styles.headerActionBtn} onPress={() => navigation.navigate('Watchlist')}>
-          <Text style={styles.headerActionIcon}>📋</Text>
+          <Text style={styles.headerActionIcon}>⏱</Text>
           <Text style={styles.headerActionText}>Sonra İzle</Text>
         </TouchableOpacity>
       ),
     });
   }, [navigation]);
 
-  useEffect(() => {
+  // Her focus'ta myMovieIds refresh — MovieDetail'den dönünce tik güncellenir
+  useFocusEffect(useCallback(() => {
     api.get('/movies/my')
-      .then((r) => {
-        const ids = new Set((r.data || []).map((m) => m.tmdbId));
-        setMyMovieIds(ids);
-      })
+      .then((r) => setMyMovieIds(new Set((r.data || []).map((m) => m.tmdbId))))
       .catch(() => {});
+  }, []));
 
+  useEffect(() => {
     api.get('/movies/trending')
       .then((r) => setTrending(r.data?.movies || r.data || []))
-      .catch(() => {})
-      .finally(() => setLoadingTrending(false));
-
+      .catch(() => {}).finally(() => setLoadingTrending(false));
     api.get('/movies/suggestions')
       .then((r) => setSuggestions((r.data?.movies || r.data || []).slice(0, 15)))
-      .catch(() => {})
-      .finally(() => setLoadingSuggestions(false));
-
+      .catch(() => {}).finally(() => setLoadingSuggestions(false));
     api.get('/movies/top-rated-cinematch')
       .then((r) => setTopRated(r.data?.movies || r.data || []))
-      .catch(() => {})
-      .finally(() => setLoadingTopRated(false));
-
+      .catch(() => {}).finally(() => setLoadingTopRated(false));
     api.get('/movies/classics')
       .then((r) => setClassics(r.data?.movies || r.data || []))
-      .catch(() => {})
-      .finally(() => setLoadingClassics(false));
+      .catch(() => {}).finally(() => setLoadingClassics(false));
   }, []);
 
-  const searchMovies = async () => {
-    if (!query.trim()) return;
+  const handleQueryChange = (text) => {
+    setQuery(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!text.trim()) { setSearchResults([]); setSearching(false); return; }
     setSearching(true);
-    try {
-      const res = await api.get(`/movies/search?query=${encodeURIComponent(query)}`);
-      setSearchResults(res.data);
-    } catch {
-      Alert.alert('Hata', 'Arama başarısız');
-    } finally {
-      setSearching(false);
-    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get(`/movies/search?query=${encodeURIComponent(text.trim())}`);
+        setSearchResults(res.data || []);
+      } catch { setSearchResults([]); }
+      finally { setSearching(false); }
+    }, 300);
   };
 
   const clearSearch = () => {
     setQuery('');
     setSearchResults([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   };
 
   const addMovie = async (movie) => {
-    await api.post('/movies/add', {
-      tmdbId: movie.tmdbId,
-      title: movie.title,
-      poster: movie.poster,
-      year: movie.year,
-    });
+    await api.post('/movies/add', { tmdbId: movie.tmdbId, title: movie.title, poster: movie.poster, year: movie.year });
     setMyMovieIds((prev) => new Set([...prev, movie.tmdbId]));
   };
 
   const goDetail = (item) => navigation.navigate('MovieDetail', {
-    tmdbId: item.tmdbId,
-    title: item.title,
-    poster: item.poster,
-    year: item.year,
+    tmdbId: item.tmdbId, title: item.title, poster: item.poster, year: item.year,
     showRatingPrompt: item.showRatingPrompt || false,
   });
 
-  const showSearch = query.length > 0 || searchResults.length > 0 || searching;
+  const showSearch = query.length > 0;
 
   return (
     <View style={styles.container}>
-      {/* Search bar — her zaman üstte */}
+
+      {/* ── Search bar — daima mount'ta, remount yok ── */}
       <View style={[styles.searchRow, searchFocused && styles.searchRowFocused]}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={styles.searchInput}
           placeholder="Film ara ve profiline ekle..."
-          placeholderTextColor={Colors.textMuted}
+          placeholderTextColor={T.textMuted}
           value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={searchMovies}
+          onChangeText={handleQueryChange}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
           returnKeyType="search"
@@ -278,212 +247,138 @@ export default function DiscoverScreen({ navigation }) {
             <Text style={styles.clearBtnText}>✕</Text>
           </TouchableOpacity>
         )}
-        <Pressable style={styles.searchBtn} onPress={searchMovies}>
-          <Text style={styles.searchBtnText}>Ara</Text>
-        </Pressable>
       </View>
 
-      {/* Arama sonuçları */}
-      {showSearch ? (
-        <View style={styles.resultsBox}>
-          {searching ? (
-            <ActivityIndicator color={Colors.red} style={{ padding: 16 }} />
-          ) : (
-            <FlatList
-              data={searchResults}
-              keyExtractor={(item) => item.tmdbId.toString()}
-              style={{ maxHeight: 260 }}
-              showsVerticalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={styles.resultSep} />}
-              ListEmptyComponent={
-                query.length > 0 && !searching ? (
-                  <Text style={styles.noResult}>Sonuç bulunamadı</Text>
-                ) : null
-              }
-              renderItem={({ item }) => <SearchResultRow item={item} onDetail={goDetail} onAdd={addMovie} isAdded={myMovieIds.has(item.tmdbId)} />}
-            />
+      {/* ── Arama sonuçları ── */}
+      {showSearch && (
+        <FlatList
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          data={searchResults}
+          keyExtractor={(item) => item.tmdbId.toString()}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 32 }}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={styles.resultSep} />}
+          ListHeaderComponent={searching ? <ActivityIndicator color={Colors.red} style={{ padding: 20 }} /> : null}
+          ListEmptyComponent={!searching ? <Text style={styles.noResult}>Sonuç bulunamadı</Text> : null}
+          renderItem={({ item }) => (
+            <SearchResultRow item={item} onDetail={goDetail} onAdd={addMovie} isAdded={myMovieIds.has(item.tmdbId)} />
           )}
-        </View>
-      ) : (
-        /* Kategoriler */
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-          <Section
-            emoji="✨"
-            title="Sana Özel"
-            accent={Colors.red}
-            data={suggestions}
-            loading={loadingSuggestions}
-            onPress={goDetail}
-            onAdd={addMovie}
-            myMovieIds={myMovieIds}
-            endpoint="/movies/suggestions"
-            navigation={navigation}
-          />
-          <Section
-            emoji="🔥"
-            title="Haftanın En Popülerleri"
-            accent="#f97316"
-            data={trending}
-            loading={loadingTrending}
-            onPress={goDetail}
-            onAdd={addMovie}
-            myMovieIds={myMovieIds}
-            endpoint="/movies/trending"
-            navigation={navigation}
-          />
-          <Section
-            emoji="❤️"
-            title="CinemaMatch En Yüksek Puanlılar"
-            accent="#e11d48"
-            data={topRated}
-            loading={loadingTopRated}
-            onPress={goDetail}
-            onAdd={addMovie}
-            showCinematch
-            myMovieIds={myMovieIds}
-            endpoint="/movies/top-rated-cinematch"
-            navigation={navigation}
-          />
-          <Section
-            emoji="🎞️"
-            title="Klasikler"
-            accent="#6366f1"
-            data={classics}
-            loading={loadingClassics}
-            onPress={goDetail}
-            onAdd={addMovie}
-            myMovieIds={myMovieIds}
-            endpoint="/movies/classics"
-            navigation={navigation}
-          />
-        </ScrollView>
+        />
       )}
+
+      {/* ── Kategoriler — search aktifken gizli ama unmount değil ── */}
+      <ScrollView
+        style={{ display: showSearch ? 'none' : 'flex' }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
+        <Section emoji="✨" title="Sana Özel" accent={Colors.red}
+          data={suggestions} loading={loadingSuggestions}
+          onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds}
+          endpoint="/movies/suggestions" navigation={navigation}
+        />
+        <Section emoji="🔥" title="Haftanın En Popülerleri" accent="#f97316"
+          data={trending} loading={loadingTrending}
+          onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds}
+          endpoint="/movies/trending" navigation={navigation}
+        />
+        <Section emoji="❤️" title="CineMatch En Yüksek Puanlılar" accent="#e11d48"
+          data={topRated} loading={loadingTopRated}
+          onPress={goDetail} onAdd={addMovie} showCinematch myMovieIds={myMovieIds}
+          endpoint="/movies/top-rated-cinematch" navigation={navigation}
+        />
+        <Section emoji="🎞️" title="Klasikler" accent="#6366f1"
+          data={classics} loading={loadingClassics}
+          onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds}
+          endpoint="/movies/classics" navigation={navigation}
+        />
+      </ScrollView>
+
     </View>
   );
 }
 
-// Fotoğraf temasından alınan token'lar
-const T = {
-  bg: '#0d0d14',
-  bgCard: '#13131f',
-  bgElevated: '#1a1a2e',
-  bgInput: 'rgba(255,255,255,0.04)',
-  accent: '#6c5ce7',
-  accentDim: 'rgba(108,92,231,0.15)',
-  accentBorder: 'rgba(108,92,231,0.4)',
-  accentSecondary: '#a29bfe',
-  gold: '#f0b429',
-  textPrimary: '#ffffff',
-  textSecondary: '#8888aa',
-  textMuted: '#444466',
-  border: '#1e1e30',
-  borderLight: '#2a2a40',
-};
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: T.bg },
-
   headerActionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginRight: 16, backgroundColor: T.accentDim,
+    marginRight: 16, backgroundColor: Colors.redDim,
     borderRadius: Radii.pill, paddingHorizontal: 12, paddingVertical: 7,
-    borderWidth: 1, borderColor: T.accentBorder,
+    borderWidth: 1, borderColor: Colors.redBorder,
   },
   headerActionIcon: { fontSize: 13 },
-  headerActionText: { color: T.accentSecondary, fontSize: 12, fontWeight: '700' },
-
+  headerActionText: { color: Colors.red, fontSize: 12, fontWeight: '700' },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginHorizontal: 16, marginTop: 12, marginBottom: 12,
+    marginHorizontal: 16, marginTop: 12, marginBottom: 8,
     backgroundColor: T.bgInput, borderRadius: Radii.md,
     borderWidth: 1, borderColor: T.border,
-    paddingLeft: 12, paddingRight: 6, paddingVertical: 4,
+    paddingLeft: 12, paddingRight: 8, paddingVertical: 4,
   },
-  searchRowFocused: { borderColor: T.accent, backgroundColor: T.accentDim },
+  searchRowFocused: { borderColor: Colors.red, backgroundColor: 'rgba(200,16,46,0.08)' },
   searchIcon: { fontSize: 14, color: T.textMuted },
   searchInput: { flex: 1, color: T.textPrimary, fontSize: 14, paddingVertical: 10 },
   clearBtn: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: T.bgElevated, justifyContent: 'center', alignItems: 'center',
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center',
   },
-  clearBtnText: { fontSize: 10, color: T.textSecondary },
-  searchBtn: {
-    backgroundColor: T.accent, borderRadius: Radii.md - 2,
-    paddingHorizontal: 14, paddingVertical: 8,
-    shadowColor: T.accent, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
-  },
-  searchBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-
-  resultsBox: {
-    marginHorizontal: 16, marginBottom: 12,
-    backgroundColor: T.bgCard, borderRadius: Radii.lg,
-    borderWidth: 1, borderColor: T.border, overflow: 'hidden',
-  },
-  resultRow: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 10 },
+  clearBtnText: { fontSize: 13, color: '#fff', fontWeight: '700' },
+  resultRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
+  resultPoster: { width: 44, height: 64, borderRadius: 8, backgroundColor: T.bgCard },
   resultInfo: { flex: 1 },
-  resultTitle: { fontSize: 13, fontWeight: '600', color: T.textPrimary },
-  resultYear: { fontSize: 11, color: T.textMuted, marginTop: 2 },
-  resultSep: { height: 0.5, backgroundColor: T.border, marginHorizontal: 10 },
+  resultTitle: { fontSize: 14, fontWeight: '600', color: T.textPrimary },
+  resultYear: { fontSize: 12, color: T.textMuted, marginTop: 3 },
+  resultSep: { height: 0.5, backgroundColor: T.border, marginHorizontal: 12 },
   addBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: T.accent, justifyContent: 'center', alignItems: 'center',
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: Colors.red, justifyContent: 'center', alignItems: 'center',
   },
-  addBtnDone: {
-    backgroundColor: '#16a34a',
-  },
+  addBtnDone: { backgroundColor: '#16a34a' },
   addBtnText: { color: '#fff', fontSize: 20, lineHeight: 22, fontWeight: '700' },
-  noResult: { color: T.textMuted, fontSize: 13, textAlign: 'center', padding: 20 },
-
-  section: { marginTop: 24 },
+  noResult: { color: T.textMuted, fontSize: 13, textAlign: 'center', padding: 40 },
+  section: { marginTop: 28 },
   sectionHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginBottom: 12, paddingHorizontal: 16,
-    justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center',
+    marginBottom: 14, paddingHorizontal: 16, justifyContent: 'space-between',
   },
   sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionAccent: { width: 3, height: 18, borderRadius: 2 },
   sectionEmoji: { fontSize: 16 },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: T.textPrimary, letterSpacing: -0.3 },
-  sectionViewAll: { fontSize: 12, color: T.accentSecondary, fontWeight: '600' },
-
-  card: { width: 115, marginRight: 10, position: 'relative' },
-  cardPosterWrap: {
-    borderRadius: 12, overflow: 'hidden',
-    borderWidth: 1, borderColor: T.border,
+  sectionViewAll: { fontSize: 12, color: Colors.red, fontWeight: '600' },
+  card: { width: 120, marginRight: 12, position: 'relative' },
+  cardPosterWrap: { borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: T.border },
+  cardImage: { width: 120, height: 175, backgroundColor: T.bgElevated },
+  cardImageFallback: { justifyContent: 'center', alignItems: 'center' },
+  cardGrad: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 60,
+    backgroundColor: 'rgba(8,8,15,0.55)',
+    borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
   },
-  cardOverlay: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    height: 60, borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
-    backgroundColor: 'rgba(13,13,20,0.55)',
-  },
-  cardTitle: {
-    color: T.textSecondary, fontSize: 11, fontWeight: '600',
-    marginTop: 7, lineHeight: 15,
-  },
+  cardTitle: { color: T.textSecondary, fontSize: 11, fontWeight: '600', marginTop: 8, lineHeight: 15 },
   ratingBadge: {
-    position: 'absolute', top: 7, left: 7,
-    backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 6,
-    paddingHorizontal: 5, paddingVertical: 2,
-    flexDirection: 'row', alignItems: 'center', gap: 2,
+    position: 'absolute', top: 8, left: 8,
+    backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3,
   },
-  ratingBadgeText: { color: T.gold, fontSize: 10, fontWeight: '700' },
+  ratingBadgeText: { color: Colors.gold, fontSize: 10, fontWeight: '700' },
   cinematchBadge: {
-    position: 'absolute', top: 7, left: 7,
-    backgroundColor: 'rgba(108,92,231,0.85)', borderRadius: 6,
-    paddingHorizontal: 5, paddingVertical: 2,
+    position: 'absolute', top: 8, left: 8,
+    backgroundColor: 'rgba(200,16,46,0.85)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3,
   },
   cinematchBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   addFab: {
-    position: 'absolute', top: 7, right: 7,
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: T.accent, justifyContent: 'center', alignItems: 'center',
-    shadowColor: T.accent, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5, shadowRadius: 6, elevation: 5,
+    position: 'absolute', top: 8, right: 8,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: Colors.red, justifyContent: 'center', alignItems: 'center',
+    shadowColor: Colors.red, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6, shadowRadius: 6, elevation: 5,
   },
   addFabDone: { backgroundColor: '#16a34a' },
   addFabText: { color: '#fff', fontSize: 16, lineHeight: 18, fontWeight: '700' },
-
-  skeletonRow: { flexDirection: 'row', paddingLeft: 16, gap: 10 },
-  skeletonCard: { width: 115, height: 165, borderRadius: 12, backgroundColor: T.bgElevated },
+  skeletonRow: { flexDirection: 'row', paddingLeft: 16, gap: 12 },
+  skeletonCard: { width: 120, height: 175, borderRadius: 14, backgroundColor: T.bgElevated },
 });
