@@ -13,6 +13,7 @@ router.get('/public/search', movieController.getPublicSearch);
 router.get('/trending', authMiddleware, movieController.getTrending);
 router.get('/top-rated-cinematch', authMiddleware, movieController.getTopRatedCinematch);
 router.get('/classics', authMiddleware, movieController.getClassics);
+router.get('/mood', authMiddleware, movieController.getMoodMovies);
 router.get('/search', authMiddleware, validate(movieValidator.searchMovies), movieController.searchMovies);
 router.get('/suggestions', authMiddleware, movieController.getMovieSuggestions);
 router.get('/my', authMiddleware, movieController.getMyMovies);

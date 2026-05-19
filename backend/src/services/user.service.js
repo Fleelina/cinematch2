@@ -40,7 +40,7 @@ const discoverUsers = async (userId) => {
   const cooldownDate = new Date(Date.now() - DISLIKE_COOLDOWN_HOURS * 60 * 60 * 1000);
 
   const [likes, recentDislikes, blockedUsers, myMovies] = await Promise.all([
-    prisma.interaction.findMany({ where: { fromUserId: userId, type: 'LIKE' }, select: { toUserId: true } }),
+    prisma.interaction.findMany({ where: { fromUserId: userId, type: { in: ['LIKE', 'MATCHED'] } }, select: { toUserId: true } }),
     prisma.interaction.findMany({ where: { fromUserId: userId, type: 'DISLIKE', createdAt: { gte: cooldownDate } }, select: { toUserId: true } }),
     prisma.interaction.findMany({ where: { fromUserId: userId, type: 'BLOCK' }, select: { toUserId: true } }),
     prisma.userMovie.findMany({ where: { userId }, select: { movieId: true } }),

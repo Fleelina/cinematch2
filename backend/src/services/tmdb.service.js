@@ -23,12 +23,16 @@ const searchMovies = async (query) => {
     params: { query },
   });
 
-  const movies = response.data.results.map((movie) => ({
-    tmdbId: movie.id,
-    title: movie.title || movie.original_title,
-    poster: movie.poster_path ? `https://image.tmdb.org/t/p/w300${movie.poster_path}` : null,
-    year: movie.release_date?.slice(0, 4),
-  }));
+  const movies = response.data.results
+    .map((movie) => ({
+      tmdbId: movie.id,
+      title: movie.title || movie.original_title,
+      poster: movie.poster_path ? `https://image.tmdb.org/t/p/w300${movie.poster_path}` : null,
+      year: movie.release_date?.slice(0, 4),
+      rating: movie.vote_average ? parseFloat(movie.vote_average.toFixed(1)) : null,
+      voteCount: movie.vote_count ?? 0,
+    }))
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 
   cache.set(cacheKey, movies, 300);
   return movies;

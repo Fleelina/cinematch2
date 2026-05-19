@@ -194,7 +194,14 @@ const likeUser = async (fromUserId, toUserId) => {
     setImmediate(() => sendMatchNotifications(fromUserId, toUserId));
   }
 
-  return { matched: true };
+  // matchId'yi bul ve döndür
+  const { user1Id, user2Id } = normalizeMatchIds(fromUserId, toUserId);
+  const match = await prisma.match.findUnique({
+    where: { user1Id_user2Id: { user1Id, user2Id } },
+    select: { id: true },
+  });
+
+  return { matched: true, matchId: match?.id ?? null };
 };
 
 const dislikeUser = (fromUserId, toUserId) =>

@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import api from '../services/api';
 import { Colors, Radii, Shadows } from '../theme';
+import MatchModal from '../components/MatchModal';
+import { useAuth } from '../context/AuthContext';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SW * 0.25;
@@ -31,6 +33,7 @@ const T = {
 };
 
 export default function MatchmakingScreen({ navigation }) {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -38,8 +41,12 @@ export default function MatchmakingScreen({ navigation }) {
   const [round, setRound] = useState(1);
   const [cardVisible, setCardVisible] = useState(true);
 
+  // Match modal
+  const [matchModalVisible, setMatchModalVisible] = useState(false);
+  const [matchedUser, setMatchedUser] = useState(null);
+  const [pendingMatchId, setPendingMatchId] = useState(null);
+
   const lastSwipedRef = useRef(null);
-  // Her zaman güncel değeri tutan ref'ler — closure sorununu çözer
   const currentIndexRef = useRef(0);
   const usersRef = useRef([]);
 
@@ -49,13 +56,8 @@ export default function MatchmakingScreen({ navigation }) {
 
   useEffect(() => { fetchUsers(); }, []);
 
-  useEffect(() => {
-    currentIndexRef.current = currentIndex;
-  }, [currentIndex]);
-
-  useEffect(() => {
-    usersRef.current = users;
-  }, [users]);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { usersRef.current = users; }, [users]);
 
   useEffect(() => {
     setCardVisible(true);
@@ -72,7 +74,7 @@ export default function MatchmakingScreen({ navigation }) {
       setCurrentIndex(0);
       position.setValue({ x: 0, y: 0 });
     } catch {
-      Alert.alert('Hata', 'Kullanicilar yuklenemedi');
+      Alert.alert('Hata', 'Kullanıcılar yüklenemedi');
     } finally {
       setLoading(false);
     }
@@ -87,7 +89,7 @@ export default function MatchmakingScreen({ navigation }) {
       setCurrentIndex((v) => v - 1);
       position.setValue({ x: 0, y: 0 });
       lastSwipedRef.current = null;
-    } catch { }
+    } catch {}
     finally { setActionLoading(null); }
   };
 
@@ -109,7 +111,6 @@ export default function MatchmakingScreen({ navigation }) {
   ).current;
 
   const triggerSwipeRight = () => {
-    // Ref'ten oku — stale closure yok
     const user = usersRef.current[currentIndexRef.current];
     if (!user?.id) return;
     setCardVisible(false);
@@ -119,7 +120,7 @@ export default function MatchmakingScreen({ navigation }) {
     ]).start();
     Animated.timing(position, {
       toValue: { x: SW + 100, y: 0 }, duration: 250, useNativeDriver: false,
-    }).start(() => handleLike(user.id));
+    }).start(() => handleLike(user));
   };
 
   const triggerSwipeLeft = () => {
@@ -135,15 +136,22 @@ export default function MatchmakingScreen({ navigation }) {
     }).start(() => handleDislike(user.id));
   };
 
-  const handleLike = async (targetId) => {
-    setActionLoading(targetId);
+  const handleLike = async (targetUser) => {
+    setActionLoading(targetUser.id);
     try {
-      const res = await api.post(`/matches/like/${targetId}`);
+      const res = await api.post(`/matches/like/${targetUser.id}`);
       const matched = res.data?.matched ?? false;
-      lastSwipedRef.current = { userId: targetId, matched };
-      if (matched) Alert.alert('Eslestiniz!', 'Ortak film zevkiniz var. Mesaj atmaya baslayin!');
+      const matchId = res.data?.matchId ?? null;
+      lastSwipedRef.current = { userId: targetUser.id, matched };
+
+      if (matched) {
+        // Modal göster — Alert yerine
+        setMatchedUser(targetUser);
+        setPendingMatchId(matchId);
+        setMatchModalVisible(true);
+      }
     } catch {
-      lastSwipedRef.current = { userId: targetId, matched: false };
+      lastSwipedRef.current = { userId: targetUser.id, matched: false };
     } finally {
       setActionLoading(null);
       setCurrentIndex((v) => v + 1);
@@ -163,6 +171,21 @@ export default function MatchmakingScreen({ navigation }) {
     }
   };
 
+  const handleModalMessage = () => {
+    setMatchModalVisible(false);
+    if (pendingMatchId) {
+      navigation.navigate('Chat', { matchId: pendingMatchId, otherUser: matchedUser });
+    } else {
+      navigation.navigate('Mesajlar');
+    }
+  };
+
+  const handleModalContinue = () => {
+    setMatchModalVisible(false);
+    setMatchedUser(null);
+    setPendingMatchId(null);
+  };
+
   const rotate = position.x.interpolate({
     inputRange: [-SW / 2, 0, SW / 2], outputRange: ['-7deg', '0deg', '7deg'], extrapolate: 'clamp',
   });
@@ -173,7 +196,7 @@ export default function MatchmakingScreen({ navigation }) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={T.accent} size="large" />
-        <Text style={styles.loadingText}>Kisiler yukleniyor...</Text>
+        <Text style={styles.loadingText}>Kişiler yükleniyor...</Text>
       </View>
     );
   }
@@ -185,8 +208,8 @@ export default function MatchmakingScreen({ navigation }) {
     return (
       <View style={styles.center}>
         <Text style={styles.doneEmoji}>🎬</Text>
-        <Text style={styles.doneTitle}>Tur {round} tamamlandi!</Text>
-        <Text style={styles.doneSub}>Atlananlar 24 saat sonra tekrar gorunecek</Text>
+        <Text style={styles.doneTitle}>Tur {round} tamamlandı!</Text>
+        <Text style={styles.doneSub}>Atlananlar 24 saat sonra tekrar görünecek</Text>
         <Pressable style={styles.refreshBtn} onPress={refresh}>
           <Text style={styles.refreshBtnText}>Yenile</Text>
         </Pressable>
@@ -234,8 +257,16 @@ export default function MatchmakingScreen({ navigation }) {
           disabled={!!actionLoading || currentIndex === 0 || !lastSwipedRef.current || lastSwipedRef.current?.matched}
           label="Geri Al" icon="↩" iconColor={T.gold}
         />
-        <ActionBtn onPress={triggerSwipeRight} style={styles.likeBtn} disabled={!!actionLoading} label="Begen" icon="♥" iconColor="#fff" />
+        <ActionBtn onPress={triggerSwipeRight} style={styles.likeBtn} disabled={!!actionLoading} label="Beğen" icon="♥" iconColor="#fff" />
       </View>
+
+      <MatchModal
+        visible={matchModalVisible}
+        matchedUser={matchedUser}
+        currentUser={currentUser}
+        onMessage={handleModalMessage}
+        onContinue={handleModalContinue}
+      />
     </View>
   );
 }
@@ -275,7 +306,7 @@ function UserCardContent({ user, compact = false }) {
       ) : null}
       {!compact && user.movies?.length > 0 ? (
         <View style={styles.moviesWrap}>
-          <Text style={styles.moviesLabel}>Izledikleri</Text>
+          <Text style={styles.moviesLabel}>İzledikleri</Text>
           <View style={styles.moviePills}>
             {user.movies.slice(0, 3).map((movie, index) => (
               <View key={`movie-${movie.movieId}-${index}`} style={styles.moviePill}>
@@ -301,7 +332,7 @@ function ActionBtn({ onPress, style, disabled, label, icon, iconColor }) {
           onPressIn={() => Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, speed: 50 }).start()}
           onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
         >
-          <Text style={{ fontSize: 24, color: iconColor }}>{icon}</Text>
+          <Text style={{ fontSize: 24, color: iconColor, opacity: disabled ? 0.35 : 1 }}>{icon}</Text>
         </Pressable>
       </Animated.View>
       <Text style={styles.actionLabel}>{label}</Text>

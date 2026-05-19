@@ -52,7 +52,7 @@ function MovieDetailSkeleton() {
 }
 
 export default function MovieDetailScreen({ route, navigation }) {
-  const { tmdbId, title, poster: initialPoster, year: initialYear, showRatingPrompt } = route.params;
+  const { tmdbId, title, poster: initialPoster, year: initialYear, showRatingPrompt, forceIsAdded } = route.params;
   const scrollRef = useRef(null);
   const ratingRef = useRef(null);
   const [movie, setMovie] = useState(null);
@@ -68,7 +68,9 @@ export default function MovieDetailScreen({ route, navigation }) {
   const fetchDetail = async () => {
     try {
       const res = await api.get(`/movies/detail/${tmdbId}`);
-      setMovie(res.data);
+      const data = res.data;
+      if (forceIsAdded) data.isAdded = true;
+      setMovie(data);
     } catch (err) {
       console.error(err);
     } finally {

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, Pressable, View } from 'react-native';
+import { Text, Pressable, View, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../context/AuthContext';
 import { OnboardingProvider } from '../context/OnboardingContext';
@@ -98,6 +99,8 @@ function HamburgerButton({ onPress }) {
 
 function MainTabs() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+  const tabBarBottomPadding = insets.bottom > 0 ? insets.bottom : 0;
 
   const screenOptions = ({ route }) => ({
     headerShown: true,
@@ -115,9 +118,10 @@ function MainTabs() {
       backgroundColor: Colors.bg,
       borderTopColor: Colors.border,
       borderTopWidth: 0.5,
-      height: 60,
-      paddingBottom: 6,
+      height: 60 + tabBarBottomPadding,
+      paddingBottom: tabBarBottomPadding,
       paddingTop: 6,
+      marginBottom: Platform.OS === 'android' ? -16 : -16,
     },
     tabBarItemStyle: { flex: 1 },
     tabBarActiveTintColor: Colors.red,
