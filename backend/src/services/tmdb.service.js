@@ -299,6 +299,31 @@ const getPublicPopular = (page = 1) =>
     }))
   );
 
+// Mood bazli film listesi — TMDB genre + keyword kombinasyonuyla beslenir.
+// Her mood sabit bir genre seti ve minimum oy sayisiyla filtrelenir.
+const MOOD_PARAMS = {
+  dark: { with_genres: '53,27,80', sort_by: 'vote_average.desc', 'vote_count.gte': 500 },
+  emotional: { with_genres: '18,10749', sort_by: 'popularity.desc', 'vote_count.gte': 500 },
+  mind_bending: { with_genres: '878,9648,53', sort_by: 'vote_average.desc', 'vote_count.gte': 300 },
+  feel_good: { with_genres: '35,10751,12', sort_by: 'popularity.desc', 'vote_count.gte': 300 },
+  thrilling: { with_genres: '28,53,12', sort_by: 'popularity.desc', 'vote_count.gte': 500 },
+};
+
+const getMoodMovies = async (mood, page = 1) => {
+  const params = MOOD_PARAMS[mood];
+  if (!params) throw new Error(`Unknown mood: ${mood}`);
+  const cacheKey = `mood:${mood}:${page}`;
+  return getCachedResults(cacheKey, '/discover/movie', { ...params, page }, 1800).then((results) =>
+    results.filter((m) => m.poster_path).map((m) => ({
+      tmdbId: m.id,
+      title: m.title || m.original_title,
+      poster: `https://image.tmdb.org/t/p/w500${m.poster_path}`,
+      year: m.release_date?.slice(0, 4) || null,
+      rating: m.vote_average ? m.vote_average.toFixed(1) : null,
+    }))
+  );
+};
+
 module.exports = {
   searchMovies,
   getMovieDetail,
@@ -311,4 +336,5 @@ module.exports = {
   getTopRatedPaged,
   getClassicsPaged,
   getPublicPopular,
+  getMoodMovies,
 };

@@ -97,6 +97,13 @@ const getClassics = asyncHandler(async (req, res) => {
   ok(res, data);
 });
 
+const getMoodMovies = asyncHandler(async (req, res) => {
+  const { mood } = req.query;
+  if (!mood) return ok(res, { movies: [] });
+  const movies = await tmdbService.getMoodMovies(mood);
+  ok(res, { movies });
+});
+
 // Onboarding icin auth gerektirmeyen public TMDB proxy
 const getPublicPopular = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -127,6 +134,7 @@ module.exports = {
   getTrending,
   getTopRatedCinematch,
   getClassics,
+  getMoodMovies,
   getPublicPopular,
   getPublicSearch,
 };

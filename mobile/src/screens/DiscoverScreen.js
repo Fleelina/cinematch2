@@ -941,6 +941,10 @@ export default function DiscoverScreen({ navigation }) {
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [loadingTopRated, setLoadingTopRated] = useState(true);
   const [loadingClassics, setLoadingClassics] = useState(true);
+  const [activeMood, setActiveMood] = useState(null);
+  const [moodMovies, setMoodMovies] = useState([]);
+  const [loadingMood, setLoadingMood] = useState(false);
+  const moodAnim = useRef(new Animated.Value(0)).current;
 
 <<<<<<< HEAD
   useLayoutEffect(() => {
@@ -1026,6 +1030,24 @@ export default function DiscoverScreen({ navigation }) {
     setQuery(''); setSearchResults([]);
 >>>>>>> 1138403 (keşfet front değiştirildi)
     if (debounceRef.current) clearTimeout(debounceRef.current);
+  };
+
+  const handleMoodSelect = async (moodKey) => {
+    if (!moodKey) {
+      setActiveMood(null);
+      setMoodMovies([]);
+      Animated.timing(moodAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+      return;
+    }
+    setActiveMood(moodKey);
+    setLoadingMood(true);
+    moodAnim.setValue(0);
+    try {
+      const res = await api.get(`/movies/mood?mood=${moodKey}`);
+      setMoodMovies(res.data?.movies || res.data || []);
+      Animated.spring(moodAnim, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 5 }).start();
+    } catch { setMoodMovies([]); }
+    finally { setLoadingMood(false); }
   };
 
   const addMovie = async (movie) => {
@@ -1138,7 +1160,30 @@ export default function DiscoverScreen({ navigation }) {
         <FeaturedCarousel data={featured} onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} />
 
         <Section emoji="✦" title="Because you liked Interstellar" data={suggestions} loading={loadingSuggestions} onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/suggestions" navigation={navigation} />
-        <MoodPills />
+        <MoodPills activeMood={activeMood} onSelect={handleMoodSelect} />
+
+        {/* Mood Section */}
+        {(activeMood || loadingMood) ? (() => {
+          const mood = MOODS.find((m) => m.key === activeMood);
+          return (
+            <Animated.View style={{
+              opacity: moodAnim,
+              transform: [{ translateY: moodAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+            }}>
+              <Section
+                emoji={mood?.sectionEmoji || '🌙'}
+                title={mood?.sectionTitle || 'Mood Picks'}
+                data={moodMovies}
+                loading={loadingMood}
+                onPress={goDetail}
+                onAdd={addMovie}
+                myMovieIds={myMovieIds}
+                endpoint={`/movies/mood?mood=${activeMood}`}
+                navigation={navigation}
+              />
+            </Animated.View>
+          );
+        })() : null}
         <Section emoji="🔥" title="Most Matched This Week" data={trending} loading={loadingTrending} onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/trending" navigation={navigation} />
         <Section emoji="❤" title="CinemaMatch En Yüksek Puanlılar" data={topRated} loading={loadingTopRated} onPress={goDetail} onAdd={addMovie} showCinematch myMovieIds={myMovieIds} endpoint="/movies/top-rated-cinematch" navigation={navigation} />
         <Section emoji="◇" title="Hidden Gems" data={classics} loading={loadingClassics} onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/classics" navigation={navigation} />
@@ -1347,8 +1392,9 @@ const styles = StyleSheet.create({
   moodPill: { height: 42, paddingHorizontal: 17, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: T.border, flexDirection: 'row', alignItems: 'center', gap: 8 },
   moodPillRed: { backgroundColor: T.redSoft, borderColor: 'rgba(255,59,85,0.28)' },
   moodPillPurple: { backgroundColor: T.purpleSoft, borderColor: 'rgba(155,92,255,0.28)' },
-  moodIcon: { color: T.purple, fontSize: 16, fontWeight: '800' },
-  moodText: { color: T.text, fontSize: 13, fontWeight: '800' },
+  moodIcon: { fontSize: 16, fontWeight: '800' },
+  moodText: { fontSize: 13, fontWeight: '800' },
+  moodDot: { width: 6, height: 6, borderRadius: 3, marginLeft: 2 },
 
   skeletonRow: { flexDirection: 'row', paddingLeft: 24, gap: 16 },
   skeletonCard: { width: 122, height: 178, borderRadius: 18, backgroundColor: T.glass, borderWidth: 1, borderColor: T.borderSoft },
