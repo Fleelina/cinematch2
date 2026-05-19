@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet, ActivityIndicator,
   Alert, TouchableOpacity, Image,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
 import { Colors, Radii, Shadows } from '../theme';
 
@@ -16,7 +17,7 @@ export default function MatchesScreen({ navigation }) {
         const res = await api.get('/matches');
         setMatches(res.data);
       } catch {
-        Alert.alert('Hata', 'Eşleşmeler yüklenemedi');
+        Alert.alert('Hata', 'Eslesmeler yuklenemedi');
       } finally {
         setLoading(false);
       }
@@ -24,90 +25,172 @@ export default function MatchesScreen({ navigation }) {
     fetchMatches();
   }, []);
 
+  const sorted = useMemo(
+    () => [...matches].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [matches]
+  );
+  const today = sorted.filter(isToday);
+  const older = sorted.filter((m) => !isToday(m));
+  const featured = sorted[0];
+
   if (loading) {
     return (
-      <View style={styles.center}>
+      <GradientShell center>
         <ActivityIndicator color={Colors.red} size="large" />
-      </View>
+      </GradientShell>
     );
   }
 
   if (matches.length === 0) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyEmoji}>🎬</Text>
-        <Text style={styles.emptyTitle}>Henüz eşleşmen yok</Text>
+      <GradientShell center>
+        <View style={styles.emptyGlow} />
+        <Text style={styles.emptyKicker}>MATCH RADAR</Text>
+        <Text style={styles.emptyTitle}>Henuz eslesmen yok</Text>
         <Text style={styles.emptySub}>
-          Beğendiğin kişiler seni de beğenince burada görünür.
+          Begendigin kisiler seni de begendiginde burada parlak bir sinyal yakalayacagiz.
         </Text>
-      </View>
+        <TouchableOpacity
+          style={styles.emptyButton}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('Eslesmeler')}
+        >
+          <Text style={styles.emptyButtonText}>Eslesmeye Basla</Text>
+        </TouchableOpacity>
+      </GradientShell>
     );
   }
 
-  const sorted = [...matches].sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-  );
-  const today = sorted.filter(isToday);
-  const older = sorted.filter((m) => !isToday(m));
-
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Eşleşmeler</Text>
-      </View>
+    <GradientShell>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.title}>Match</Text>
+            <Text style={styles.subtitle}>
+              {matches.length} sinyal bulundu, sohbet icin hazir.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.radarButton}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('Eslesmeler')}
+          >
+            <Text style={styles.radarIcon}>+</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Bugünkü eşleşmeler — yatay scroll */}
-      {today.length > 0 && (
-        <View style={styles.todaySection}>
-          <Text style={styles.sectionLabel}>Yeni</Text>
-          <FlatList
+        {featured && (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Chat', {
+              matchId: featured.matchId,
+              otherUser: featured.user,
+            })}
+          >
+            <LinearGradient
+              colors={['rgba(200,16,46,0.22)', 'rgba(255,255,255,0.055)', 'rgba(10,10,15,0.94)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
+              <View style={styles.heroOrb} />
+              <View style={styles.heroAvatarWrap}>
+                <MatchAvatar user={featured.user} size={82} />
+                <View style={styles.heroAvatarRing} />
+              </View>
+              <View style={styles.heroCopy}>
+                <Text style={styles.heroKicker}>EN SICAK ESLESME</Text>
+                <Text style={styles.heroName} numberOfLines={1}>{featured.user.name}</Text>
+                <Text style={styles.heroMeta}>
+                  {isToday(featured) ? 'Bugun eslestiniz' : `${getDaysAgo(featured.createdAt)} eslestiniz`}
+                </Text>
+              </View>
+              <View style={styles.heroCta}>
+                <Text style={styles.heroCtaText}>Sohbet</Text>
+                <Text style={styles.heroCtaArrow}>›</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {today.length > 0 && (
+          <SectionHeader label="Yeni eslesmeler" accent="LIVE" />
+        )}
+        {today.length > 0 && (
+          <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            data={today}
-            keyExtractor={(item) => item.matchId + '_h'}
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
-            renderItem={({ item }) => (
+            contentContainerStyle={styles.todayList}
+          >
+            {today.map((item) => (
               <TouchableOpacity
+                key={`${item.matchId}_today`}
                 style={styles.todayCard}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
                 onPress={() => navigation.navigate('Chat', {
-                  matchId: item.matchId, otherUser: item.user,
+                  matchId: item.matchId,
+                  otherUser: item.user,
                 })}
               >
-                <View style={styles.todayAvatarRing}>
-                  <MatchAvatar user={item.user} size={54} />
-                </View>
+                <LinearGradient
+                  colors={['rgba(255,65,89,0.55)', 'rgba(255,255,255,0.04)']}
+                  style={styles.todayAvatarShell}
+                >
+                  <MatchAvatar user={item.user} size={64} />
+                </LinearGradient>
                 <Text style={styles.todayName} numberOfLines={1}>
                   {item.user.name.split(' ')[0]}
                 </Text>
+                <Text style={styles.todayHint}>Yeni</Text>
               </TouchableOpacity>
-            )}
-          />
-        </View>
-      )}
-
-      {/* Tüm eşleşmeler — dikey liste */}
-      <View style={styles.listSection}>
-        {older.length > 0 && today.length > 0 && (
-          <Text style={[styles.sectionLabel, { marginHorizontal: 16, marginBottom: 10 }]}>Önceki</Text>
+            ))}
+          </ScrollView>
         )}
-        <FlatList
-          data={older.length > 0 ? older : sorted}
-          keyExtractor={(item) => item.matchId}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 32 }}
-          renderItem={({ item }) => (
+
+        <SectionHeader label={older.length > 0 ? 'Tum eslesmeler' : 'Sohbetler'} accent="CHAT" />
+        <View style={styles.matchList}>
+          {(older.length > 0 ? older : sorted).map((item) => (
             <MatchRow
+              key={item.matchId}
               item={item}
               onPress={() => navigation.navigate('Chat', {
-                matchId: item.matchId, otherUser: item.user,
+                matchId: item.matchId,
+                otherUser: item.user,
               })}
               onAvatarPress={() => navigation.navigate('UserProfile', { userId: item.user.id })}
             />
-          )}
-        />
-      </View>
+          ))}
+        </View>
+      </ScrollView>
+    </GradientShell>
+  );
+}
+
+function GradientShell({ children, center }) {
+  return (
+    <LinearGradient
+      colors={['#210409', '#07080d', '#030407']}
+      locations={[0, 0.38, 1]}
+      style={[styles.container, center && styles.center]}
+    >
+      <View style={styles.redBloom} />
+      <View style={styles.blueBloom} />
+      {children}
+    </LinearGradient>
+  );
+}
+
+function SectionHeader({ label, accent }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionMark} />
+      <Text style={styles.sectionTitle}>{label}</Text>
+      <View style={styles.sectionLine} />
+      <Text style={styles.sectionAccent}>{accent}</Text>
     </View>
   );
 }
@@ -117,35 +200,41 @@ function MatchRow({ item, onPress, onAvatarPress }) {
   const isNew = isToday(item);
 
   return (
-    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.75}>
+    <TouchableOpacity style={styles.matchCard} onPress={onPress} activeOpacity={0.78}>
       <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.9}>
-        <View style={isNew ? styles.avatarRingNew : null}>
-          <MatchAvatar user={item.user} size={50} />
+        <View style={[styles.rowAvatarShell, isNew && styles.rowAvatarShellNew]}>
+          <MatchAvatar user={item.user} size={54} />
         </View>
       </TouchableOpacity>
 
       <View style={styles.matchInfo}>
         <View style={styles.matchTop}>
-          <Text style={styles.matchName}>{item.user.name}</Text>
-          {isNew
-            ? <View style={styles.newBadge}><Text style={styles.newBadgeText}>Yeni</Text></View>
-            : <Text style={styles.matchDate}>{daysAgo}</Text>
-          }
+          <Text style={styles.matchName} numberOfLines={1}>{item.user.name}</Text>
+          {isNew ? (
+            <View style={styles.newBadge}>
+              <Text style={styles.newBadgeText}>Yeni</Text>
+            </View>
+          ) : (
+            <Text style={styles.matchDate}>{daysAgo}</Text>
+          )}
         </View>
-        {item.user.bio
-          ? <Text style={styles.matchBio} numberOfLines={1}>{item.user.bio}</Text>
-          : <Text style={styles.matchBioFallback}>Sohbet başlat →</Text>
-        }
+        {item.user.bio ? (
+          <Text style={styles.matchBio} numberOfLines={1}>{item.user.bio}</Text>
+        ) : (
+          <Text style={styles.matchBioFallback}>Ilk mesaji gonder</Text>
+        )}
       </View>
 
-      <Text style={styles.chevron}>›</Text>
+      <View style={styles.chevronBubble}>
+        <Text style={styles.chevron}>›</Text>
+      </View>
     </TouchableOpacity>
   );
 }
 
 function MatchAvatar({ user, size }) {
-  const AVATAR_COLORS = ['#c8102e', '#1d6a8a', '#2a6a3a', '#6a2a7a', '#6a4a1a'];
-  const colorIndex = user.name?.charCodeAt(0) % AVATAR_COLORS.length ?? 0;
+  const avatarColors = ['#c8102e', '#1d6a8a', '#2a6a3a', '#6a2a7a', '#6a4a1a'];
+  const colorIndex = user.name?.charCodeAt(0) % avatarColors.length ?? 0;
 
   if (user?.avatar) {
     return (
@@ -158,7 +247,7 @@ function MatchAvatar({ user, size }) {
   return (
     <View style={{
       width: size, height: size, borderRadius: size / 2,
-      backgroundColor: AVATAR_COLORS[colorIndex],
+      backgroundColor: avatarColors[colorIndex],
       justifyContent: 'center', alignItems: 'center',
     }}>
       <Text style={{ color: '#fff', fontSize: size * 0.38, fontWeight: '800' }}>
@@ -167,8 +256,6 @@ function MatchAvatar({ user, size }) {
     </View>
   );
 }
-
-// ─── Yardımcı fonksiyonlar ───────────────────────────────────────────────────
 
 function isToday(match) {
   const d = new Date(match.createdAt);
@@ -180,79 +267,231 @@ function isToday(match) {
 
 function getDaysAgo(dateStr) {
   const diff = Math.floor((new Date() - new Date(dateStr)) / 86400000);
-  if (diff === 0) return 'Bugün';
-  if (diff === 1) return 'Dün';
-  return `${diff} gün önce`;
+  if (diff === 0) return 'Bugun';
+  if (diff === 1) return 'Dun';
+  return `${diff} gun once`;
 }
-
-// ─── Stiller ────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
-  center: {
-    flex: 1, backgroundColor: Colors.bg,
-    justifyContent: 'center', alignItems: 'center', padding: 32,
+  center: { justifyContent: 'center', alignItems: 'center', padding: 32 },
+  scrollContent: { paddingBottom: 44 },
+  redBloom: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    left: -110,
+    top: -70,
+    backgroundColor: 'rgba(200,16,46,0.24)',
+    opacity: 0.9,
+  },
+  blueBloom: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    right: -90,
+    top: 190,
+    backgroundColor: 'rgba(66,120,255,0.08)',
   },
 
-  // Header
-  header: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20 },
-  headerTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: Colors.textPrimary },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 58,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 46,
+    fontWeight: '900',
+    letterSpacing: -1.8,
+  },
+  subtitle: { color: Colors.textSecondary, fontSize: 15, marginTop: 4 },
+  radarButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,89,0.78)',
+    backgroundColor: 'rgba(200,16,46,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.red,
+  },
+  radarIcon: { color: '#fff', fontSize: 34, fontWeight: '300', marginTop: -3 },
 
-  // Bugünkü eşleşmeler (yatay)
-  todaySection: { marginBottom: 24 },
-  sectionLabel: {
-    fontSize: 10, fontWeight: '700', letterSpacing: 1.2,
-    textTransform: 'uppercase', color: Colors.textMuted,
-    marginBottom: 12, paddingHorizontal: 16,
+  heroCard: {
+    marginHorizontal: 22,
+    minHeight: 174,
+    borderRadius: 30,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,89,0.35)',
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...Shadows.red,
   },
-  todayCard: { alignItems: 'center', gap: 7, width: 70 },
-  todayAvatarRing: {
-    padding: 2,
-    borderRadius: 100,
-    borderWidth: 2,
-    borderColor: Colors.red,
+  heroOrb: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    right: -48,
+    top: -56,
+    backgroundColor: 'rgba(255,65,89,0.16)',
   },
-  todayName: {
-    fontSize: 11, color: Colors.textSecondary,
-    fontWeight: '600', textAlign: 'center',
+  heroAvatarWrap: { width: 96, height: 96, justifyContent: 'center', alignItems: 'center' },
+  heroAvatarRing: {
+    position: 'absolute',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 1.3,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
+  heroCopy: { flex: 1, paddingLeft: 12 },
+  heroKicker: { color: Colors.red, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 7 },
+  heroName: { color: Colors.textPrimary, fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  heroMeta: { color: Colors.textSecondary, fontSize: 12, marginTop: 5 },
+  heroCta: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: Radii.pill,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  heroCtaText: { color: Colors.textPrimary, fontSize: 12, fontWeight: '800' },
+  heroCtaArrow: { color: Colors.red, fontSize: 18, marginTop: -1 },
 
-  // Liste
-  listSection: { flex: 1 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 24,
+    marginTop: 28,
+    marginBottom: 13,
+    gap: 9,
+  },
+  sectionMark: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.red,
+    shadowColor: Colors.red,
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+  },
+  sectionTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: -0.3 },
+  sectionLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.07)' },
+  sectionAccent: { color: '#a984ff', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+
+  todayList: { paddingHorizontal: 22, gap: 14 },
+  todayCard: {
+    width: 104,
+    minHeight: 142,
+    borderRadius: 26,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  todayAvatarShell: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  todayName: { color: Colors.textPrimary, fontSize: 13, fontWeight: '800', maxWidth: 86 },
+  todayHint: { color: Colors.red, fontSize: 10, fontWeight: '800', marginTop: 4 },
+
+  matchList: { paddingHorizontal: 16, gap: 10 },
   matchCard: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 16, marginBottom: 8,
-    backgroundColor: Colors.bgCard,
-    borderRadius: Radii.lg, padding: 14,
-    borderWidth: 0.5, borderColor: Colors.border,
-    gap: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    minHeight: 86,
+    borderRadius: 24,
+    padding: 13,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
   },
-  avatarRingNew: {
+  rowAvatarShell: {
     padding: 2,
     borderRadius: 100,
-    borderWidth: 2,
-    borderColor: Colors.red,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  rowAvatarShellNew: {
+    backgroundColor: 'rgba(255,65,89,0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,65,89,0.55)',
   },
   matchInfo: { flex: 1 },
   matchTop: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+    gap: 8,
   },
-  matchName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
-  matchDate: { fontSize: 10, color: Colors.textMuted },
+  matchName: { flex: 1, color: Colors.textPrimary, fontSize: 16, fontWeight: '900' },
+  matchDate: { color: Colors.textMuted, fontSize: 11, fontWeight: '700' },
   newBadge: {
     backgroundColor: Colors.redDim,
     borderRadius: Radii.pill,
-    borderWidth: 0.5, borderColor: Colors.redBorder,
-    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 0.5,
+    borderColor: Colors.redBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  newBadgeText: { fontSize: 10, fontWeight: '800', color: Colors.red },
-  matchBio: { fontSize: 12, color: Colors.textSecondary },
-  matchBioFallback: { fontSize: 12, color: Colors.textMuted },
-  chevron: { fontSize: 18, color: Colors.textHint, marginLeft: -4 },
+  newBadgeText: { color: Colors.red, fontSize: 10, fontWeight: '900' },
+  matchBio: { color: Colors.textSecondary, fontSize: 12 },
+  matchBioFallback: { color: Colors.textMuted, fontSize: 12 },
+  chevronBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  chevron: { color: Colors.textPrimary, fontSize: 22, marginTop: -2 },
 
-  // Boş durum
-  emptyEmoji: { fontSize: 56, marginBottom: 16 },
-  emptyTitle: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', marginBottom: 8 },
-  emptySub: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+  emptyGlow: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(200,16,46,0.2)',
+  },
+  emptyKicker: { color: Colors.red, fontSize: 11, fontWeight: '900', letterSpacing: 1.4, marginBottom: 10 },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 27, fontWeight: '900', letterSpacing: -0.8, marginBottom: 9 },
+  emptySub: { color: Colors.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 22 },
+  emptyButton: {
+    height: 46,
+    paddingHorizontal: 22,
+    borderRadius: Radii.pill,
+    backgroundColor: Colors.red,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.red,
+  },
+  emptyButtonText: { color: '#fff', fontSize: 13, fontWeight: '900' },
 });

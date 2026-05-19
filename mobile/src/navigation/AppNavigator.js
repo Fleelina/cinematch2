@@ -136,7 +136,7 @@ function MainTabs() {
       <Tab.Navigator screenOptions={screenOptions}>
         <Tab.Screen name="Filmlerim" component={DiscoverScreen} options={{ title: 'Keşfet' }} />
         <Tab.Screen name="Swipe" component={SwipeScreen} options={{ title: 'Filmler' }} />
-        <Tab.Screen name="Eslesmeler" component={MatchmakingScreen} options={{ title: 'Eşleşmeler' }} />
+        <Tab.Screen name="Eslesmeler" component={MatchmakingScreen} options={{ title: 'Eşleşmeler', headerShown: false }} />
         <Tab.Screen name="Begeniler" component={LikesScreen} options={{ title: 'Beğeniler' }} />
         <Tab.Screen name="Mesajlar" component={MessagesScreen} options={{ title: 'Mesajlar', headerShown: false }} />
       </Tab.Navigator>
