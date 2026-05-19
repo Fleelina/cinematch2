@@ -14,6 +14,11 @@ const errorHandler = (err, req, res, next) => {
     return res.status(err.statusCode).json({ success: false, error: err.message });
   }
 
+  if (err.name === 'MulterError') {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'Dosya 20MB limitini asamaz' : 'Dosya yukleme hatasi';
+    return res.status(400).json({ success: false, error: message });
+  }
+
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({ success: false, error: 'Gecersiz token' });
   }

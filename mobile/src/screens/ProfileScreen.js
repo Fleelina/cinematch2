@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import * as DocumentPicker from 'expo-document-picker';
 import {
   View, Text, Image, ScrollView, StyleSheet,
   TouchableOpacity, ActivityIndicator, Pressable,
@@ -13,6 +14,10 @@ export default function ProfileScreen({ navigation }) {
   const [stats, setStats] = useState(null);
   const [blockedCount, setBlockedCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState(null);
+  const [importError, setImportError] = useState('');
+  const [showUnmatched, setShowUnmatched] = useState(false);
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -34,6 +39,43 @@ export default function ProfileScreen({ navigation }) {
   }, [fetchProfileData]));
 
   const displayName = user?.showAge && user?.age ? `${user.name}, ${user.age}` : user?.name;
+
+  const importLetterboxd = async () => {
+    if (importing) return;
+
+    setImportError('');
+    setImportSummary(null);
+    setShowUnmatched(false);
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/zip', 'application/x-zip-compressed'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const file = result.assets[0];
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        name: file.name || 'letterboxd-export.zip',
+        type: file.mimeType || 'application/zip',
+      });
+
+      setImporting(true);
+      const res = await api.post('/import/letterboxd', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setImportSummary(res.data);
+      fetchProfileData();
+    } catch (err) {
+      setImportError(err.response?.data?.error || 'Letterboxd import basarisiz oldu');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <ScrollView
@@ -96,6 +138,81 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.blockedArrow}>›</Text>
             </View>
           </TouchableOpacity>
+
+          <View style={styles.importCard}>
+            <View style={styles.importHeader}>
+              <View style={styles.importBadge}>
+                <Text style={styles.importBadgeText}>LB</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.importTitle}>Letterboxd'den ice aktar</Text>
+                <Text style={styles.importSub}>
+                  ZIP export dosyani yukle, filmlerini tek seferde tasiyalim.
+                </Text>
+              </View>
+            </View>
+
+            {importSummary && (
+              <>
+                <View style={styles.importSummary}>
+                  <ImportSummaryItem label="Film" value={importSummary.importedSuccessfully} />
+                  <ImportSummaryItem label="Puan" value={importSummary.ratingsImported} />
+                  <ImportSummaryItem label="Liste" value={importSummary.watchlistEntriesImported} />
+                  <ImportSummaryItem label="Eslesmedi" value={importSummary.unmatchedFilms} muted />
+                </View>
+
+                {importSummary.unmatched?.length > 0 && (
+                  <>
+                    <Pressable
+                      style={({ pressed }) => [styles.unmatchedToggle, pressed && { opacity: 0.75 }]}
+                      onPress={() => setShowUnmatched((value) => !value)}
+                    >
+                      <Text style={styles.unmatchedToggleText}>
+                        {showUnmatched ? 'Eslesmeyenleri gizle' : 'Eslesmeyenleri goster'}
+                      </Text>
+                      <Text style={styles.unmatchedToggleArrow}>{showUnmatched ? '⌃' : '⌄'}</Text>
+                    </Pressable>
+
+                    {showUnmatched && (
+                      <View style={styles.unmatchedList}>
+                        {importSummary.unmatched.slice(0, 12).map((movie, index) => (
+                          <View key={`${movie.title}-${movie.year || index}`} style={styles.unmatchedRow}>
+                            <Text style={styles.unmatchedTitle} numberOfLines={1}>
+                              {movie.title}
+                            </Text>
+                            <Text style={styles.unmatchedYear}>{movie.year || '-'}</Text>
+                          </View>
+                        ))}
+                        {importSummary.unmatched.length > 12 && (
+                          <Text style={styles.unmatchedMore}>
+                            +{importSummary.unmatched.length - 12} film daha
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {importError ? <Text style={styles.importError}>{importError}</Text> : null}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.importBtn,
+                importing && styles.importBtnDisabled,
+                pressed && !importing && { opacity: 0.86 },
+              ]}
+              disabled={importing}
+              onPress={importLetterboxd}
+            >
+              {importing ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.importBtnText}>ZIP Yukle</Text>
+              )}
+            </Pressable>
+          </View>
 
           {stats?.topMovies?.length > 0 && (
             <Section emoji="🎞️" title="Son Eklenenler">
@@ -240,6 +357,15 @@ function HabitRow({ label, value, last }) {
   );
 }
 
+function ImportSummaryItem({ label, value, muted }) {
+  return (
+    <View style={styles.importSummaryItem}>
+      <Text style={[styles.importSummaryValue, muted && styles.importSummaryValueMuted]}>{value ?? 0}</Text>
+      <Text style={styles.importSummaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function SkeletonProfile() {
   return (
     <>
@@ -337,6 +463,90 @@ const styles = StyleSheet.create({
   blockedEntryRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   blockedCount: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800' },
   blockedArrow: { color: Colors.textMuted, fontSize: 20 },
+
+  importCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 15,
+    borderRadius: Radii.lg,
+    backgroundColor: '#101008',
+    borderWidth: 0.5,
+    borderColor: 'rgba(240,180,41,0.18)',
+  },
+  importHeader: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  importBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: 'rgba(240,180,41,0.14)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(240,180,41,0.28)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  importBadgeText: { color: Colors.gold, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
+  importTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 3 },
+  importSub: { color: Colors.textSecondary, fontSize: 12, lineHeight: 17 },
+  importSummary: {
+    flexDirection: 'row',
+    marginTop: 14,
+    borderRadius: Radii.md,
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    overflow: 'hidden',
+  },
+  importSummaryItem: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRightWidth: 0.5,
+    borderRightColor: 'rgba(255,255,255,0.06)',
+  },
+  importSummaryValue: { color: Colors.gold, fontSize: 15, fontWeight: '900' },
+  importSummaryValueMuted: { color: Colors.textMuted },
+  importSummaryLabel: { color: Colors.textMuted, fontSize: 9, marginTop: 2, textTransform: 'uppercase' },
+  importError: { color: '#ff8d8d', fontSize: 12, marginTop: 10, lineHeight: 17 },
+  unmatchedToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: Radii.md,
+    backgroundColor: 'rgba(255,255,255,0.035)',
+  },
+  unmatchedToggleText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  unmatchedToggleArrow: { color: Colors.textMuted, fontSize: 14, fontWeight: '800' },
+  unmatchedList: {
+    marginTop: 8,
+    borderRadius: Radii.md,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
+  },
+  unmatchedRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  unmatchedTitle: { flex: 1, color: Colors.textSecondary, fontSize: 12 },
+  unmatchedYear: { color: Colors.textMuted, fontSize: 12, fontWeight: '700' },
+  unmatchedMore: { color: Colors.textMuted, fontSize: 11, padding: 10, textAlign: 'center' },
+  importBtn: {
+    height: 42,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.red,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+    ...Shadows.red,
+  },
+  importBtnDisabled: { opacity: 0.65 },
+  importBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
 
   section: { marginHorizontal: 16, marginTop: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },

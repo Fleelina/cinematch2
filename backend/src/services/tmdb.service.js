@@ -38,6 +38,78 @@ const searchMovies = async (query) => {
   return movies;
 };
 
+const normalizeMovieTitle = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/^(the|a|an)\s+/, '');
+
+const getReleaseYear = (movie) => {
+  const year = parseInt(movie.release_date?.slice(0, 4), 10);
+  return Number.isInteger(year) ? year : null;
+};
+
+const scoreMovieMatch = (movie, title, year) => {
+  const targetTitle = normalizeMovieTitle(title);
+  const movieTitle = normalizeMovieTitle(movie.title);
+  const originalTitle = normalizeMovieTitle(movie.original_title);
+  const movieYear = getReleaseYear(movie);
+
+  let score = 0;
+  if (movieTitle === targetTitle || originalTitle === targetTitle) score += 70;
+  if (year && movieYear === year) score += 30;
+  if (year && movieYear && Math.abs(movieYear - year) === 1) score += 15;
+  if (movie.vote_count >= 50) score += 5;
+  if (movie.poster_path) score += 5;
+
+  return { score, movieYear };
+};
+
+const findBestMovieMatch = async (title, year) => {
+  const normalizedQuery = `${title}:${year || 'unknown'}`.toLowerCase().trim();
+  const cacheKey = `tmdb_import_match:${normalizedQuery}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Object.prototype.hasOwnProperty.call(cached, 'match')) return cached.match;
+
+  const response = await withRetry(() =>
+    tmdbClient.get('/search/movie', {
+      params: {
+        query: title,
+        year: year || undefined,
+        include_adult: false,
+      },
+    })
+  );
+
+  const candidates = response.data.results || [];
+  const scored = candidates
+    .map((movie) => {
+      const { score, movieYear } = scoreMovieMatch(movie, title, year);
+      return { movie, score, movieYear };
+    })
+    .sort((a, b) => b.score - a.score || (b.movie.vote_count || 0) - (a.movie.vote_count || 0));
+
+  const best = scored[0];
+  const hasConfidentMatch = best && best.score >= (year ? 95 : 75);
+
+  const match = hasConfidentMatch
+    ? {
+        tmdbId: best.movie.id,
+        title: best.movie.title || best.movie.original_title,
+        poster: best.movie.poster_path ? `https://image.tmdb.org/t/p/w500${best.movie.poster_path}` : null,
+        year: best.movieYear,
+      }
+    : null;
+
+  cache.set(cacheKey, { match }, 7 * 24 * 60 * 60);
+  return match;
+};
+
 // Ag kaynakli gecici hatalarda kontrollu retry uygular.
 // 4xx hatalar tekrar edilmez.
 const withRetry = async (fn, retries = 2, delay = 500) => {
@@ -326,6 +398,7 @@ const getMoodMovies = async (mood, page = 1) => {
 
 module.exports = {
   searchMovies,
+  findBestMovieMatch,
   getMovieDetail,
   getPersonDetail,
   getSuggestionPools,
