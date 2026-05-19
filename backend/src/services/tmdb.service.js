@@ -361,7 +361,7 @@ const getClassicsPaged = (page = 1) =>
   );
 
 const getPublicPopular = (page = 1) =>
-  getCachedResults(`popular:${page}`, '/movie/popular', { page, language: 'tr-TR' }, 600).then((results) =>
+  getCachedResults(`public_popular:${page}`, '/movie/popular', { page, language: 'tr-TR' }, 600).then((results) =>
     results.filter((m) => m.poster_path).map((m) => ({
       tmdbId: m.id,
       title: m.title || m.original_title,

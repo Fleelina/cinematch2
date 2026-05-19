@@ -118,21 +118,25 @@ export default function Step5Movies({ navigation }) {
     setLoadingMore(false);
   };
 
-  const doSearch = async () => {
-    const q = query.trim();
-    if (!q) { clearSearch(); return; }
+  const debounceRef = useRef(null);
+
+  const handleQueryChange = (text) => {
+    setQuery(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!text.trim()) { clearSearch(); return; }
     setIsSearchMode(true);
     setSearching(true);
-    const results = await fetchSearch(q);
-    // Backend searchMovies farklı format döner, normalize et
-    const normalized = results.map((m) => ({
-      id: m.tmdbId || m.id,
-      title: m.title,
-      poster_path: m.poster ? m.poster.replace('https://image.tmdb.org/t/p/w300', '') : null,
-      release_date: m.year ? `${m.year}-01-01` : null,
-    }));
-    setMovies(normalized);
-    setSearching(false);
+    debounceRef.current = setTimeout(async () => {
+      const results = await fetchSearch(text.trim());
+      const normalized = results.map((m) => ({
+        id: m.tmdbId || m.id,
+        title: m.title,
+        poster_path: m.poster ? m.poster.replace('https://image.tmdb.org/t/p/w300', '') : null,
+        release_date: m.year ? `${m.year}-01-01` : null,
+      }));
+      setMovies(normalized);
+      setSearching(false);
+    }, 500);
   };
 
   const clearSearch = () => {
@@ -263,8 +267,7 @@ export default function Step5Movies({ navigation }) {
         <TextInput
           style={styles.searchInput}
           value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={doSearch}
+          onChangeText={handleQueryChange}
           placeholder="Film ara..."
           placeholderTextColor={Colors.textMuted}
           returnKeyType="search"
@@ -278,13 +281,6 @@ export default function Step5Movies({ navigation }) {
             <Text style={{ color: Colors.textMuted, fontSize: 16 }}>✕</Text>
           </Pressable>
         )}
-        <Pressable
-          onPress={doSearch}
-          style={[styles.searchBtn, (!query.trim() || searching) && { opacity: 0.5 }]}
-          disabled={!query.trim() || searching}
-        >
-          <Text style={styles.searchBtnText}>Ara</Text>
-        </Pressable>
       </View>
 
       <Text style={styles.sectionHeading}>

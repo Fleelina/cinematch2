@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, FlatList, TextInput, TouchableOpacity,
   Image, StyleSheet, ActivityIndicator, Alert, Pressable, Animated,
-  Dimensions,
+  Dimensions, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import api from '../services/api';
 import { Colors, Radii } from '../theme';
@@ -17,11 +17,9 @@ const T = {
   bg: '#050506',
   bgSoft: '#0B0B10',
   glass: 'rgba(255,255,255,0.075)',
-  glassStrong: 'rgba(255,255,255,0.11)',
   border: 'rgba(255,255,255,0.12)',
   borderSoft: 'rgba(255,255,255,0.07)',
   red: '#ff3b55',
-  redSoft: 'rgba(255,59,85,0.18)',
   purple: '#9b5cff',
   purpleSoft: 'rgba(155,92,255,0.17)',
   gold: '#f8c84a',
@@ -340,15 +338,19 @@ export default function DiscoverScreen({ navigation }) {
     forceIsAdded: item.showRatingPrompt || false,
   });
 
-  const showSearch = searchResults.length > 0 || searching;
   const featured = suggestions.length >= 3 ? suggestions.slice(0, 8) : trending.slice(0, 8);
+  const showSearch = query.trim().length > 0;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
       <View style={styles.redGlow} />
       <View style={styles.purpleGlow} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <View style={{ flex: 1 }}>
         <View style={styles.hero}>
           <View style={styles.heroRow}>
             <Text style={styles.heroTitle}>Discover</Text>
@@ -363,101 +365,137 @@ export default function DiscoverScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.heroSubtitle} numberOfLines={1}>Find your next <Text style={styles.heroSubtitleAccent}>obsession</Text></Text>
+          <Text style={styles.heroSubtitle}>Find your next <Text style={styles.heroSubtitleAccent}>obsession</Text></Text>
         </View>
 
         <View style={[styles.searchRow, searchFocused && styles.searchRowFocused]}>
-          <Text style={styles.searchIcon}>⎕</Text>
-          <TextInput style={styles.searchInput} placeholder="Search films, actors, lists..."
-            placeholderTextColor={T.textMuted} value={query} onChangeText={handleQueryChange}
-            onSubmitEditing={searchMovies} onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)} returnKeyType="search"
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Film, oyuncu veya liste ara..."
+            placeholderTextColor={T.textMuted}
+            value={query}
+            onChangeText={handleQueryChange}
+            onSubmitEditing={() => searchMovies()}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            returnKeyType="search"
           />
-          {query.length > 0 ? (
+          {query.length > 0 && (
             <TouchableOpacity onPress={clearSearch} style={styles.clearBtn}>
               <Text style={styles.clearBtnText}>×</Text>
             </TouchableOpacity>
-          ) : null}
-          <Pressable style={styles.filterBtn} onPress={searchMovies}>
-            <Text style={styles.filterText}>☷</Text>
-          </Pressable>
+          )}
         </View>
 
-        <FeaturedCarousel data={featured} onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} />
-
-        <Section emoji="✦" title="Because you liked Interstellar" data={suggestions} loading={loadingSuggestions}
-          onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/suggestions" navigation={navigation} />
-
-        <MoodPills activeMood={activeMood} onSelect={handleMoodSelect} />
-
-        {(activeMood || loadingMood) ? (() => {
-          const mood = MOODS.find((m) => m.key === activeMood);
-          return (
-            <Animated.View style={{ opacity: moodAnim, transform: [{ translateY: moodAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }}>
-              <Section emoji={mood?.sectionEmoji || '🌙'} title={mood?.sectionTitle || 'Mood Picks'}
-                data={moodMovies} loading={loadingMood} onPress={goDetail} onAdd={addMovie}
-                myMovieIds={myMovieIds} endpoint={`/movies/mood?mood=${activeMood}`} navigation={navigation}
-              />
-            </Animated.View>
-          );
-        })() : null}
-
-        <Section emoji="🔥" title="Most Matched This Week" data={trending} loading={loadingTrending}
-          onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/trending" navigation={navigation} />
-        <Section emoji="❤" title="CinemaMatch En Yüksek Puanlılar" data={topRated} loading={loadingTopRated}
-          onPress={goDetail} onAdd={addMovie} showCinematch myMovieIds={myMovieIds} endpoint="/movies/top-rated-cinematch" navigation={navigation} />
-        <Section emoji="◇" title="Hidden Gems" data={classics} loading={loadingClassics}
-          onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/classics" navigation={navigation} />
-      </ScrollView>
-
-      {showSearch && (
-        <View style={styles.resultsOverlay}>
-          <View style={styles.resultsBox}>
+        {showSearch ? (
+          <View style={[styles.searchResultsSection, { flex: 1 }]}> 
+            <Text style={styles.searchResultsTitle}>Arama Sonuçları</Text>
             {searching ? (
               <ActivityIndicator color={T.red} style={{ padding: 18 }} />
             ) : (
-              <FlatList data={searchResults} keyExtractor={(item) => item.tmdbId.toString()}
-                style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.tmdbId.toString()}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1 }}
                 ItemSeparatorComponent={() => <View style={styles.resultSep} />}
-                ListEmptyComponent={query.length > 0 && !searching ? <Text style={styles.noResult}>Sonuç bulunamadı</Text> : null}
-                renderItem={({ item }) => <SearchResultRow item={item} onDetail={goDetail} onAdd={addMovie} isAdded={myMovieIds.has(item.tmdbId)} />}
+                ListEmptyComponent={<Text style={styles.noResult}>Sonuç bulunamadı</Text>}
+                renderItem={({ item }) => (
+                  <SearchResultRow
+                    item={item}
+                    onDetail={goDetail}
+                    onAdd={addMovie}
+                    isAdded={myMovieIds.has(item.tmdbId)}
+                  />
+                )}
               />
             )}
           </View>
-        </View>
-      )}
-    </View>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            onScrollBeginDrag={() => {
+              Keyboard.dismiss();
+              setSearchFocused(false);
+            }}
+            contentContainerStyle={{ paddingBottom: 120 }}
+          >
+            <FeaturedCarousel data={featured} onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} />
+
+            <Section emoji="✦" title="Because you liked Interstellar" data={suggestions} loading={loadingSuggestions}
+              onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/suggestions" navigation={navigation} />
+
+            <MoodPills activeMood={activeMood} onSelect={handleMoodSelect} />
+
+            {(activeMood || loadingMood) ? (() => {
+              const mood = MOODS.find((m) => m.key === activeMood);
+              return (
+                <Animated.View style={{ opacity: moodAnim, transform: [{ translateY: moodAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }}>
+                  <Section emoji={mood?.sectionEmoji || '🌙'} title={mood?.sectionTitle || 'Mood Picks'}
+                    data={moodMovies} loading={loadingMood} onPress={goDetail} onAdd={addMovie}
+                    myMovieIds={myMovieIds} endpoint={`/movies/mood?mood=${activeMood}`} navigation={navigation}
+                  />
+                </Animated.View>
+              );
+            })() : null}
+
+            <Section emoji="🔥" title="Most Matched This Week" data={trending} loading={loadingTrending}
+              onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/trending" navigation={navigation} />
+            <Section emoji="❤" title="CinemaMatch En Yüksek Puanlılar" data={topRated} loading={loadingTopRated}
+              onPress={goDetail} onAdd={addMovie} showCinematch myMovieIds={myMovieIds} endpoint="/movies/top-rated-cinematch" navigation={navigation} />
+            <Section emoji="◇" title="Hidden Gems" data={classics} loading={loadingClassics}
+              onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/classics" navigation={navigation} />
+          </ScrollView>
+        )}
+      </View>
+
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: T.bg },
-  redGlow: { position: 'absolute', top: -120, left: -100, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(255,59,85,0.22)' },
-  purpleGlow: { position: 'absolute', top: 190, right: -140, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(155,92,255,0.13)' },
-  hero: { paddingTop: 56, paddingHorizontal: 24, paddingBottom: 20 },
-  heroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroTitle: { color: T.text, fontSize: 38, fontWeight: '900', letterSpacing: -2, flex: 1 },
-  heroSubtitle: { color: T.textSoft, fontSize: 15, marginTop: 3, letterSpacing: -0.3 },
-  heroSubtitleAccent: { color: T.red },
-  heroActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
-  watchlistButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,59,85,0.08)', borderWidth: 1, borderColor: 'rgba(255,59,85,0.55)', shadowColor: T.red, shadowOpacity: 0.3, shadowRadius: 14, elevation: 8 },
-  watchlistIcon: { color: T.red, fontSize: 16, fontWeight: '800' },
-  watchlistText: { color: T.text, fontSize: 12, fontWeight: '800' },
-  avatarButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: T.red, backgroundColor: T.glass, justifyContent: 'center', alignItems: 'center', shadowColor: T.red, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8, flexShrink: 0 },
-  avatarText: { color: T.text, fontSize: 15, fontWeight: '900' },
-  avatarDot: { position: 'absolute', right: -1, top: 1, width: 10, height: 10, borderRadius: 5, backgroundColor: T.red },
-  searchRow: { marginHorizontal: 24, height: 66, borderRadius: 28, backgroundColor: T.glass, borderWidth: 1, borderColor: T.border, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 12 },
-  searchRowFocused: { borderColor: 'rgba(255,59,85,0.42)', backgroundColor: T.glassStrong },
-  searchIcon: { color: T.text, fontSize: 34, lineHeight: 36, opacity: 0.95 },
-  searchInput: { flex: 1, color: T.text, fontSize: 16, paddingVertical: 12 },
-  clearBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.11)', justifyContent: 'center', alignItems: 'center' },
-  clearBtnText: { color: T.textSoft, fontSize: 18, lineHeight: 20 },
-  filterBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
-  filterText: { color: T.textSoft, fontSize: 24, lineHeight: 26 },
-  featuredCard: { position: 'relative' },
-  featuredPosterWrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: T.border, backgroundColor: T.bgSoft },
-  featuredPosterWrapActive: { borderColor: 'rgba(255,59,85,0.5)', shadowColor: T.red, shadowOpacity: 0.4, shadowRadius: 24, elevation: 16 },
-  posterDarkGradient: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 92, backgroundColor: 'rgba(0,0,0,0.3)' },
+  redGlow: { position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,59,85,0.09)' },
+  purpleGlow: { position: 'absolute', top: 120, left: -80, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(155,92,255,0.07)' },
+  hero: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  heroTitle: { fontSize: 34, fontWeight: '900', color: T.text, letterSpacing: -1 },
+  heroSubtitle: { fontSize: 14, color: T.textMuted, fontWeight: '600' },
+  heroSubtitleAccent: { color: T.red, fontWeight: '800' },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  watchlistButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: T.border },
+  watchlistIcon: { fontSize: 13 },
+  watchlistText: { color: T.textSoft, fontSize: 12, fontWeight: '700' },
+  avatarButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: T.purple, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: T.text, fontSize: 14, fontWeight: '900' },
+  avatarDot: { position: 'absolute', top: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: T.red, borderWidth: 2, borderColor: T.bg },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 4, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 16, borderWidth: 1, borderColor: T.border, paddingLeft: 14, paddingRight: 8, paddingVertical: 2 },
+  searchRowFocused: { borderColor: T.purple, backgroundColor: 'rgba(155,92,255,0.08)' },
+  searchIcon: { fontSize: 16, color: T.textMuted, marginRight: 4 },
+  searchInput: { flex: 1, color: T.text, fontSize: 15, paddingVertical: 12 },
+  clearBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', marginRight: 4 },
+  clearBtnText: { fontSize: 18, color: T.text, lineHeight: 20 },
+  searchResultsSection: { marginHorizontal: 20, marginTop: 12, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', overflow: 'hidden', paddingBottom: 14 },
+  searchResultsTitle: { color: T.text, fontSize: 16, fontWeight: '900', paddingHorizontal: 16, paddingVertical: 14 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
+  resultPoster: { width: 44, height: 64, borderRadius: 11, backgroundColor: T.bgSoft },
+  resultInfo: { flex: 1 },
+  resultTitle: { color: T.text, fontSize: 14, fontWeight: '800' },
+  resultMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  resultYear: { color: T.textMuted, fontSize: 12, fontWeight: '600' },
+  resultRating: { color: T.gold, fontSize: 12, fontWeight: '800' },
+  resultSep: { height: 1, backgroundColor: T.borderSoft, marginHorizontal: 12 },
+  resultAdd: { width: 34, height: 34, borderRadius: 17, backgroundColor: T.purple, justifyContent: 'center', alignItems: 'center' },
+  resultAddText: { color: T.text, fontSize: 23, lineHeight: 25, fontWeight: '700' },
+  noResult: { color: T.textMuted, fontSize: 14, textAlign: 'center', padding: 22, fontWeight: '700' },
+  featuredCard: { marginBottom: 4 },
+  featuredPosterWrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: T.borderSoft },
+  featuredPosterWrapActive: { shadowColor: T.purple, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12 },
+  posterDarkGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'rgba(5,5,6,0.4)', borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   imdbBadge: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.72)' },
   imdbMini: { color: '#121212', backgroundColor: T.gold, fontSize: 8, fontWeight: '900', paddingHorizontal: 3, borderRadius: 2 },
   imdbText: { color: T.text, fontSize: 12, fontWeight: '800' },
@@ -494,17 +532,4 @@ const styles = StyleSheet.create({
   moodDot: { width: 6, height: 6, borderRadius: 3, marginLeft: 2 },
   skeletonRow: { flexDirection: 'row', paddingLeft: 24, gap: 16 },
   skeletonCard: { width: 122, height: 178, borderRadius: 18, backgroundColor: T.glass, borderWidth: 1, borderColor: T.borderSoft },
-  resultsOverlay: { position: 'absolute', top: 150, left: 0, right: 0, zIndex: 20 },
-  resultsBox: { marginHorizontal: 24, backgroundColor: 'rgba(13,13,18,0.96)', borderRadius: 24, borderWidth: 1, borderColor: T.border, overflow: 'hidden' },
-  resultRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
-  resultPoster: { width: 44, height: 64, borderRadius: 11, backgroundColor: T.bgSoft },
-  resultInfo: { flex: 1 },
-  resultTitle: { color: T.text, fontSize: 14, fontWeight: '800' },
-  resultMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  resultYear: { color: T.textMuted, fontSize: 12, fontWeight: '600' },
-  resultRating: { color: T.gold, fontSize: 12, fontWeight: '800' },
-  resultSep: { height: 1, backgroundColor: T.borderSoft, marginHorizontal: 12 },
-  resultAdd: { width: 34, height: 34, borderRadius: 17, backgroundColor: T.purple, justifyContent: 'center', alignItems: 'center' },
-  resultAddText: { color: T.text, fontSize: 23, lineHeight: 25, fontWeight: '700' },
-  noResult: { color: T.textMuted, fontSize: 14, textAlign: 'center', padding: 22, fontWeight: '700' },
 });
