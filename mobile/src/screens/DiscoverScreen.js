@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useLayoutEffect, useEffect, useRef, useCallback, useContext } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, FlatList, TextInput, TouchableOpacity,
@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import api from '../services/api';
 import { Colors, Radii } from '../theme';
+import { useAuth } from '../context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_W = 170;
@@ -257,6 +258,8 @@ function SearchResultRow({ item, onDetail, onAdd, isAdded }) {
 }
 
 export default function DiscoverScreen({ navigation }) {
+  const { user } = useAuth();
+  const avatarLetter = user?.name ? user.name.charAt(0).toUpperCase() : '?';
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -360,7 +363,7 @@ export default function DiscoverScreen({ navigation }) {
                 <Text style={styles.watchlistText}>My Watchlist</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.avatarButton} onPress={() => navigation.navigate('MyProfile')}>
-                <Text style={styles.avatarText}>A</Text>
+                <Text style={styles.avatarText}>{avatarLetter}</Text>
                 <View style={styles.avatarDot} />
               </TouchableOpacity>
             </View>

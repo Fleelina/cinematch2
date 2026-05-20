@@ -1,68 +1,98 @@
-// CineMatch — Design Tokens
-// Tüm ekranlar bu dosyadan import eder, renk/spacing değişimi tek noktadan yapılır
+// src/theme.js
 
-export const Colors = {
-  // Zemin
-  bg: '#0a0a0f',
-  bgCard: '#12121e',
-  bgElevated: '#1a1a2a',
-  bgInput: 'rgba(255,255,255,0.04)',
-
-  // Vurgu
-  red: '#c8102e',
-  redDim: 'rgba(200,16,46,0.12)',
-  redBorder: 'rgba(200,16,46,0.35)',
-  redGlow: 'rgba(200,16,46,0.25)',
-
-  // Metin
-  textPrimary: '#ffffff',
-  textSecondary: '#888898',
-  textMuted: '#44445a',
-  textHint: '#333345',
-
-  // Sınırlar
-  border: '#1e1e2e',
-  borderDim: '#14141e',
-
-  // Durum renkleri
-  green: '#00c864',
-  greenDim: 'rgba(0,200,100,0.12)',
+// 1. Sabit Temel Renk Paletleri
+const lightColors = {
+  bg: '#f8f9fa',
+  bgSoft: '#ffffff',
+  glass: 'rgba(0,0,0,0.03)',
+  glassStrong: 'rgba(0,0,0,0.06)',
+  border: 'rgba(0,0,0,0.08)',
+  borderSoft: 'rgba(0,0,0,0.04)',
+  
+  red: '#ff3b55',
+  redSoft: 'rgba(255,59,85,0.1)',
+  redBorder: 'rgba(255,59,85,0.2)',
+  purple: '#8a46ff',
+  purpleSoft: 'rgba(138,70,255,0.08)',
+  purpleBorder: 'rgba(138,70,255,0.15)',
   gold: '#f0b429',
-  goldDim: 'rgba(240,180,41,0.12)',
+  success: '#20c997',
+
+  textPrimary: '#121214',
+  textSecondary: '#495057',
+  textMuted: '#adb5bd',
 };
 
+const darkColors = {
+  bg: '#050506',
+  bgSoft: '#0B0B10',
+  glass: 'rgba(255,255,255,0.06)',
+  glassStrong: 'rgba(255,255,255,0.10)',
+  border: 'rgba(255,255,255,0.10)',
+  borderSoft: 'rgba(255,255,255,0.06)',
+  
+  red: '#ff3b55',
+  redSoft: 'rgba(255,59,85,0.15)',
+  redBorder: 'rgba(255,59,85,0.35)',
+  purple: '#9b5cff',
+  purpleSoft: 'rgba(155,92,255,0.15)',
+  purpleBorder: 'rgba(155,92,255,0.30)',
+  gold: '#f8c84a',
+  success: '#27c46b',
+
+  textPrimary: '#ffffff',
+  textSecondary: '#b9b8c7',
+  textMuted: '#737286',
+};
+
+// 2. Projedeki Eski Import'ların Patlamaması İçin Varsayılan Sabit (Default Dark)
+export const Colors = darkColors;
+
+// 3. Modlar Arası Dinamik Geçiş İçin Temalar
+export const lightTheme = { ...lightColors };
+export const darkTheme = { ...darkColors };
+
+// 4. Kenar Yumuşatma Ayarları
 export const Radii = {
-  sm: 8,
+  sm: 6,
   md: 12,
   lg: 16,
-  xl: 24,
-  card: 20,
-  pill: 100,
+  xl: 20,
+  max: 9999,
 };
 
-export const Typography = {
-  heroTitle: { fontSize: 34, fontWeight: '800', letterSpacing: -1, color: Colors.textPrimary },
-  screenTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: Colors.textPrimary },
-  cardTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3, color: Colors.textPrimary },
-  bodyLg: { fontSize: 15, color: Colors.textPrimary },
-  body: { fontSize: 14, color: Colors.textPrimary },
-  caption: { fontSize: 12, color: Colors.textSecondary },
-  label: { fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: Colors.textMuted },
-};
-
+// 5. Statik Gölgeler (Eski sayfaların patlamaması için varsayılan Colors'ı referans alır)
 export const Shadows = {
-  card: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 12,
+  purple: {
+    shadowColor: Colors.purple,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   red: {
-    shadowColor: '#c8102e',
+    shadowColor: Colors.red,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
 };
+
+// 6. Dinamik Gölgeler (Yeni kuracağın ThemeContext içinde kullanmak istersen)
+export const getShadows = (activeTheme) => ({
+  purple: {
+    shadowColor: activeTheme.purple,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  red: {
+    shadowColor: activeTheme.red,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+});
