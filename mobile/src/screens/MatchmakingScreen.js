@@ -17,7 +17,6 @@ import { useAuth } from '../context/AuthContext';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SW * 0.25;
-const CARD_H = SH * 0.67;
 
 const T = {
   bg: '#05060a',
@@ -233,20 +232,31 @@ export default function MatchmakingScreen({ navigation }) {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <GradientShell>
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerTop}>
             <Text style={styles.title}>Match</Text>
-            <Text style={styles.subtitle}>Uyumlu profilleri keşfet, sinyali yakala.</Text>
+            <Pressable style={styles.matchesPill} onPress={() => navigation.navigate('Matches')}>
+              <View style={styles.matchesPillIcon}>
+                <Text style={styles.matchesPillIconText}>♥</Text>
+              </View>
+              <Text style={styles.matchesPillText}>Eşleşenler</Text>
+              <Text style={styles.matchesPillArrow}>›</Text>
+            </Pressable>
           </View>
-          <Pressable style={styles.matchesPill} onPress={() => navigation.navigate('Matches')}>
-            <View style={styles.matchesPillIcon}>
-              <Text style={styles.matchesPillIconText}>♥</Text>
-            </View>
-            <Text style={styles.matchesPillText}>Eşleşenler</Text>
-            <Text style={styles.matchesPillArrow}>›</Text>
-          </Pressable>
+          <Text style={styles.subtitle}>Uyumlu profilleri keşfet, sinyali yakala.</Text>
         </View>
 
         <View style={styles.cardArea}>
+          {/* Geri al — kartın sağ üstünde floating */}
+          <Pressable
+            style={[
+              styles.undoFloating,
+              (!!actionLoading || currentIndex === 0 || !lastSwipedRef.current || lastSwipedRef.current?.matched) && { opacity: 0.2 }
+            ]}
+            onPress={handleUndo}
+            disabled={!!actionLoading || currentIndex === 0 || !lastSwipedRef.current || lastSwipedRef.current?.matched}
+          >
+            <Text style={styles.undoFloatingIcon}>↺</Text>
+          </Pressable>
           {/* Arka kart */}
           {next ? (
             <Animated.View style={[styles.card, { transform: [{ scale: backCardScale }], opacity: backCardOpacity }]}>
@@ -261,8 +271,8 @@ export default function MatchmakingScreen({ navigation }) {
               simultaneousHandlers={cardListRef}
               onGestureEvent={onGestureEvent}
               onHandlerStateChange={onHandlerStateChange}
-              activeOffsetX={[-10, 10]}   // yatay 10px+ → swipe aktif
-              failOffsetY={[-8, 8]}       // dikey 8px+ → gesture başarısız, FlatList alır
+              activeOffsetX={[-10, 10]}
+              failOffsetY={[-8, 8]}
             >
               <Animated.View
                 style={[styles.card, {
@@ -276,21 +286,12 @@ export default function MatchmakingScreen({ navigation }) {
                   <View style={[styles.badge, styles.badgeNope]}><Text style={styles.badgeNopeText}>NOPE ✕</Text></View>
                 </Animated.View>
 
-                <UserCardContent user={current} listRef={cardListRef} panRef={cardPanRef} />
+                <UserCardContent user={current} listRef={cardListRef} panRef={cardPanRef} onLike={triggerSwipeRight} />
               </Animated.View>
             </PanGestureHandler>
           ) : null}
-        </View>
 
-        <View style={styles.actions}>
-          <ActionBtn onPress={triggerSwipeLeft} style={styles.skipBtn} disabled={!!actionLoading} label="Atla" icon="✕" iconColor={T.red} />
-          <ActionBtn
-            onPress={handleUndo}
-            style={styles.undoBtn}
-            disabled={!!actionLoading || currentIndex === 0 || !lastSwipedRef.current || lastSwipedRef.current?.matched}
-            label="Geri Al" icon="↩" iconColor={T.gold}
-          />
-          <ActionBtn onPress={triggerSwipeRight} style={styles.likeBtn} disabled={!!actionLoading} label="Beğen" icon="♥" iconColor="#fff" />
+
         </View>
 
         <MatchModal
@@ -350,7 +351,7 @@ function BackCardContent({ user }) {
 //   [4] Foto 3   — boşluk (ileride 3. profil fotoğrafı)
 //   [5] Info 3   — Hakkında
 
-function UserCardContent({ user, listRef, panRef }) {
+function UserCardContent({ user, listRef, panRef, onLike }) {
   const recentMovies = user.movies?.slice(0, 3) ?? [];
   const hasCommonMovies = user.commonMovies > 0 && user.movies?.length > 0;
 
@@ -390,19 +391,30 @@ function UserCardContent({ user, listRef, panRef }) {
                 {user.age ? <Text style={styles.heroAge}>,  {user.age}</Text> : null}
               </Text>
               {user.username ? <Text style={styles.heroUsername}>@{user.username}</Text> : null}
-              <View style={styles.scoreRow}>
-                <View style={styles.matchScorePill}>
-                  <Text style={styles.matchScoreValue}>%{user.matchScore}</Text>
-                  <Text style={styles.matchScoreLabel}> uyum</Text>
-                </View>
-                {user.commonMovies > 0 ? (
-                  <View style={styles.commonMoviePill}>
-                    <Text style={styles.commonMovieValue}>{user.commonMovies} ortak film</Text>
+              <View style={styles.photo1Separator} />
+              <View style={styles.scoreRowWithLike}>
+                <View style={styles.scoreRow}>
+                  <View style={styles.matchScorePill}>
+                    <Text style={styles.matchScoreValue}>%{user.matchScore}</Text>
+                    <Text style={styles.matchScoreLabel}> uyum</Text>
                   </View>
-                ) : null}
+                  {user.commonMovies > 0 ? (
+                    <View style={styles.commonMoviePill}>
+                      <Text style={styles.commonMovieValue}>{user.commonMovies} ortak film</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Pressable
+                  style={styles.likeInPhoto}
+                  onPress={onLike}
+                  hitSlop={12}
+                >
+                  <View style={styles.likeInPhotoGradient}>
+                    <Text style={styles.likeInPhotoIcon}>♥</Text>
+                  </View>
+                </Pressable>
               </View>
             </View>
-            <Text style={styles.scrollHint}>↓ kaydır</Text>
           </View>
         );
 
@@ -531,7 +543,29 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24, paddingTop: 54, paddingBottom: 6,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexDirection: 'column',
+  },
+  headerTop: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2,
+  },
+  undoFloating: {
+    position: 'absolute',
+    top: -44,
+    right: 16,
+    zIndex: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#12131b',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,64,88,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  undoFloatingIcon: {
+    fontSize: 15,
+    color: T.accent,
+    marginTop: -1,
   },
   title: { color: T.textPrimary, fontSize: 46, fontWeight: '900', letterSpacing: -1.8 },
   subtitle: { color: T.textSecondary, fontSize: 14, marginTop: 2, maxWidth: SW * 0.58 },
@@ -569,11 +603,11 @@ const styles = StyleSheet.create({
 
   cardArea: {
     flex: 1, alignItems: 'center', justifyContent: 'flex-start',
-    marginHorizontal: 8, marginTop: 6, marginBottom: 8,
+    marginHorizontal: 8, marginTop: 6, marginBottom: 0,
   },
   card: {
-    position: 'absolute', top: 0,
-    width: SW - 18, height: CARD_H,
+    position: 'absolute', top: 0, bottom: 0,
+    width: SW - 18,
     borderRadius: 28, backgroundColor: '#11131b',
     borderWidth: 1, borderColor: '#242734', overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
@@ -582,7 +616,7 @@ const styles = StyleSheet.create({
 
   // ── Slide: photo ──
   slidePhoto: {
-    height: CARD_H,
+    height: SH * 0.72,
     backgroundColor: '#08090e',
     justifyContent: 'center',
     alignItems: 'center',
@@ -610,12 +644,22 @@ const styles = StyleSheet.create({
   },
   topBadgeText: { color: T.accentSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
 
-  photo1Identity: { position: 'absolute', bottom: 28, left: 22, right: 22 },
+  photo1Identity: { position: 'absolute', bottom: 24, left: 22, right: 22 },
   heroName: { color: T.textPrimary, fontSize: 32, fontWeight: '900', letterSpacing: -1, marginBottom: 4 },
   heroAge: { fontSize: 24, fontWeight: '400', opacity: 0.8 },
   heroUsername: { color: T.accentSecondary, fontSize: 14, fontWeight: '700', marginBottom: 12 },
 
-  scoreRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  photo1Separator: {
+    height: 0.5,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginVertical: 14,
+  },
+  scoreRowWithLike: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scoreRow: { flexDirection: 'row', gap: 8, alignItems: 'center', flex: 1 },
   matchScorePill: {
     flexDirection: 'row', alignItems: 'baseline',
     backgroundColor: 'rgba(255,64,88,0.18)',
@@ -630,11 +674,6 @@ const styles = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
   },
   commonMovieValue: { color: T.gold, fontSize: 12, fontWeight: '700' },
-  scrollHint: {
-    position: 'absolute', bottom: 8, right: 18,
-    color: 'rgba(255,255,255,0.28)', fontSize: 11,
-  },
-
   // ── Slide: info ──
   slideInfo: {
     minHeight: 0,
@@ -679,21 +718,32 @@ const styles = StyleSheet.create({
   badgeLikeText: { color: T.green, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
   badgeNopeText: { color: T.red, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
 
-  // ── Action bar ──
-  actions: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    gap: 42, paddingBottom: 10, paddingTop: 4,
+  // ── Like in photo ──
+  likeInPhoto: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    shadowColor: '#6b0f1a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.55,
+    shadowRadius: 20,
+    elevation: 12,
+    flexShrink: 0,
   },
-  actionBtn: { borderRadius: Radii.pill, justifyContent: 'center', alignItems: 'center' },
-  actionBtnSlot: { width: 59, height: 59, alignItems: 'center', justifyContent: 'center' },
-  undoBtn: { width: 45, height: 45, backgroundColor: '#11131b', borderWidth: 1.3, borderColor: 'rgba(240,180,41,0.34)' },
-  skipBtn: { width: 59, height: 59, backgroundColor: '#11131b', borderWidth: 1.4, borderColor: 'rgba(255,64,88,0.36)' },
-  likeBtn: {
-    width: 59, height: 59, backgroundColor: T.accent,
-    shadowColor: T.accent, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.6, shadowRadius: 18, elevation: 12,
+  likeInPhotoGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: 'rgba(220,60,80,0.25)',
+    backgroundColor: 'rgba(18,6,8,0.72)',
   },
-  actionLabel: { fontSize: 10, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  likeInPhotoIcon: {
+    fontSize: 18,
+    color: '#c8374a',
+  },
 
   // ── Done screen ──
   doneEmoji: { fontSize: 60, marginBottom: 16 },

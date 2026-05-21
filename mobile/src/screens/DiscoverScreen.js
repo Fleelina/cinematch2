@@ -5,14 +5,16 @@ import {
   Image, StyleSheet, ActivityIndicator, Alert, Pressable, Animated,
   Dimensions, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
 import { Colors, Radii } from '../theme';
 import { useAuth } from '../context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_W = 170;
-const CARD_GAP = 14;
+const CARD_W = SCREEN_WIDTH * 0.8 * 0.58;
+const CARD_GAP = 16;
 const SNAP_W = CARD_W + CARD_GAP;
+const SIDE_PADDING = (SCREEN_WIDTH - CARD_W) / 2;
 
 const T = {
   bg: '#050506',
@@ -39,43 +41,82 @@ function Poster({ uri, width = 112, height = 168, radius = 22 }) {
   );
 }
 
-function SectionHeader({ emoji, title, onViewAll }) {
+function SectionHeader({ emoji, title, onViewAll, hideViewAll }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeaderLeft}>
         <View style={styles.sectionIcon}><Text style={styles.sectionEmoji}>{emoji}</Text></View>
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
-      <TouchableOpacity onPress={onViewAll} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Text style={styles.sectionViewAll}>Tümü ›</Text>
-      </TouchableOpacity>
+      {!hideViewAll && (
+        <TouchableOpacity onPress={onViewAll} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Text style={styles.sectionViewAll}>Tümü ›</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
 
 function FeaturedCarousel({ data, onPress, onAdd, myMovieIds }) {
   const [activeIdx, setActiveIdx] = useState(0);
-  const scrollRef = useRef(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
   if (!data || data.length === 0) return null;
-  const snapOffsets = data.map((_, i) => i * SNAP_W);
-  const handleScroll = (e) => {
-    const x = e.nativeEvent.contentOffset.x;
-    setActiveIdx(Math.max(0, Math.min(Math.round(x / SNAP_W), data.length - 1)));
-  };
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+    {
+      useNativeDriver: true,
+      listener: (e) => {
+        const x = e.nativeEvent.contentOffset.x;
+        const idx = Math.round(x / SNAP_W);
+        setActiveIdx(Math.max(0, Math.min(idx, data.length - 1)));
+      },
+    }
+  );
+
   return (
     <View style={{ marginTop: 28 }}>
-      <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}
-        decelerationRate="fast" snapToOffsets={snapOffsets} snapToAlignment="start"
-        contentContainerStyle={{ paddingLeft: 20, paddingRight: SCREEN_WIDTH - CARD_W - 20, gap: CARD_GAP }}
-        onScroll={handleScroll} scrollEventThrottle={16}
+      <Animated.ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={SNAP_W}
+        snapToAlignment="start"
+        decelerationRate={0.89}
+        contentContainerStyle={{ paddingHorizontal: SIDE_PADDING, gap: CARD_GAP }}
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        disableIntervalMomentum={true}
       >
-        {data.map((item, index) => (
-          <FeaturedCard key={item.tmdbId?.toString() || index} item={item}
-            isActive={index === activeIdx} onPress={onPress} onAdd={onAdd}
-            isAdded={myMovieIds?.has(item.tmdbId)}
-          />
-        ))}
-      </ScrollView>
+        {data.map((item, index) => {
+          const inputRange = [
+            (index - 1) * SNAP_W,
+            index * SNAP_W,
+            (index + 1) * SNAP_W,
+          ];
+          const scale = scrollX.interpolate({
+            inputRange,
+            outputRange: [0.88, 1, 0.88],
+            extrapolate: 'clamp',
+          });
+          const opacity = scrollX.interpolate({
+            inputRange,
+            outputRange: [0.6, 1, 0.6],
+            extrapolate: 'clamp',
+          });
+          return (
+            <FeaturedCard
+              key={item.tmdbId?.toString() || index}
+              item={item}
+              isActive={index === activeIdx}
+              onPress={onPress}
+              onAdd={onAdd}
+              isAdded={myMovieIds?.has(item.tmdbId)}
+              animScale={scale}
+              animOpacity={opacity}
+            />
+          );
+        })}
+      </Animated.ScrollView>
       <View style={styles.dots}>
         {data.map((_, i) => <View key={i} style={[styles.dot, i === activeIdx && styles.dotActive]} />)}
       </View>
@@ -83,15 +124,10 @@ function FeaturedCarousel({ data, onPress, onAdd, myMovieIds }) {
   );
 }
 
-function FeaturedCard({ item, isActive, onPress, onAdd, isAdded }) {
-  const scaleAnim = useRef(new Animated.Value(isActive ? 1 : 0.88)).current;
+function FeaturedCard({ item, isActive, onPress, onAdd, isAdded, animScale, animOpacity }) {
   const addScale = useRef(new Animated.Value(1)).current;
   const [added, setAdded] = useState(false);
   const isDone = isAdded || added;
-
-  useEffect(() => {
-    Animated.spring(scaleAnim, { toValue: isActive ? 1 : 0.88, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
-  }, [isActive]);
 
   const handleAdd = () => {
     if (isDone) return;
@@ -102,11 +138,11 @@ function FeaturedCard({ item, isActive, onPress, onAdd, isAdded }) {
     onAdd(item).then(() => { setAdded(true); onPress({ ...item, showRatingPrompt: true }); }).catch(() => {});
   };
 
-  const cardH = isActive ? 260 : 220;
+  const cardH = CARD_W * 1.5;
   return (
-    <Animated.View style={[styles.featuredCard, { width: CARD_W, transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View style={[styles.featuredCard, { width: CARD_W, transform: [{ scale: animScale || 1 }], opacity: animOpacity || 1 }]}>
       <TouchableOpacity activeOpacity={0.92} onPress={() => onPress(item)}>
-        <View style={[styles.featuredPosterWrap, isActive && styles.featuredPosterWrapActive, { height: cardH }]}>
+        <View style={[styles.featuredPosterWrap, { height: cardH }]}>
           <Poster uri={item.poster} width={CARD_W} height={cardH} radius={20} />
           <View style={styles.posterDarkGradient} />
           {item.rating ? (
@@ -176,10 +212,30 @@ const MOODS = [
   { key: 'thrilling',    icon: '⌁', label: 'Thrilling',    color: '#ff3b55', softColor: 'rgba(255,59,85,0.18)',   borderColor: 'rgba(255,59,85,0.28)',  sectionTitle: '⚡ Thrilling Picks',        sectionEmoji: '⚡' },
 ];
 
+function MoodLoadingText({ color }) {
+  const [dotCount, setDotCount] = useState(1);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDotCount((prev) => (prev >= 3 ? 1 : prev + 1));
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+  return (
+    <View style={styles.moodLoadingWrap}>
+      <Text style={[styles.moodLoadingText, { color: color || T.purple }]}>
+        {'Sizin için en iyi seçenekler belirleniyor'}
+        <Text style={{ opacity: dotCount >= 1 ? 1 : 0 }}>.</Text>
+        <Text style={{ opacity: dotCount >= 2 ? 1 : 0 }}>.</Text>
+        <Text style={{ opacity: dotCount >= 3 ? 1 : 0 }}>.</Text>
+      </Text>
+    </View>
+  );
+}
+
 function MoodPills({ activeMood, onSelect }) {
   return (
     <View style={styles.moodSection}>
-      <SectionHeader emoji="🌙" title="Tonight's Mood" onViewAll={() => {}} />
+      <SectionHeader emoji="🌙" title="Tonight's Mood" onViewAll={null} hideViewAll />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moodList}>
         {MOODS.map((mood) => {
           const isActive = activeMood === mood.key;
@@ -321,7 +377,10 @@ export default function DiscoverScreen({ navigation }) {
       Animated.timing(moodAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
       return;
     }
-    setActiveMood(moodKey); setLoadingMood(true); moodAnim.setValue(0);
+    setActiveMood(moodKey);
+    setLoadingMood(true);
+    setMoodMovies([]);
+    moodAnim.setValue(0);
     try {
       const res = await api.get(`/movies/mood?mood=${moodKey}`);
       setMoodMovies(res.data?.movies || res.data || []);
@@ -346,12 +405,17 @@ export default function DiscoverScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <View style={styles.redGlow} />
-      <View style={styles.purpleGlow} />
+      <LinearGradient
+        colors={['#0e0418', '#07060d', '#030407']}
+        locations={[0, 0.45, 1]}
+        style={styles.container}
+      >
+        <View style={styles.purpleBloom} />
+        <View style={styles.redBloom} />
 
       <View style={{ flex: 1 }}>
         <View style={styles.hero}>
@@ -436,10 +500,12 @@ export default function DiscoverScreen({ navigation }) {
 
             {(activeMood || loadingMood) ? (() => {
               const mood = MOODS.find((m) => m.key === activeMood);
-              return (
+              return loadingMood ? (
+                <MoodLoadingText color={mood?.color} />
+              ) : (
                 <Animated.View style={{ opacity: moodAnim, transform: [{ translateY: moodAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }}>
                   <Section emoji={mood?.sectionEmoji || '🌙'} title={mood?.sectionTitle || 'Mood Picks'}
-                    data={moodMovies} loading={loadingMood} onPress={goDetail} onAdd={addMovie}
+                    data={moodMovies} loading={false} onPress={goDetail} onAdd={addMovie}
                     myMovieIds={myMovieIds} endpoint={`/movies/mood?mood=${activeMood}`} navigation={navigation}
                   />
                 </Animated.View>
@@ -455,15 +521,22 @@ export default function DiscoverScreen({ navigation }) {
           </ScrollView>
         )}
       </View>
-
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: T.bg },
-  redGlow: { position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,59,85,0.09)' },
-  purpleGlow: { position: 'absolute', top: 120, left: -80, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(155,92,255,0.07)' },
+  flex: { flex: 1 },
+  container: { flex: 1 },
+  purpleBloom: {
+    position: 'absolute', width: 320, height: 320, borderRadius: 160,
+    left: -130, top: -95, backgroundColor: 'rgba(126,46,255,0.18)',
+  },
+  redBloom: {
+    position: 'absolute', width: 220, height: 220, borderRadius: 110,
+    right: -80, top: 260, backgroundColor: 'rgba(200,16,46,0.12)',
+  },
   hero: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
   heroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   heroTitle: { fontSize: 34, fontWeight: '900', color: T.text, letterSpacing: -1 },
@@ -496,7 +569,7 @@ const styles = StyleSheet.create({
   resultAddText: { color: T.text, fontSize: 23, lineHeight: 25, fontWeight: '700' },
   noResult: { color: T.textMuted, fontSize: 14, textAlign: 'center', padding: 22, fontWeight: '700' },
   featuredCard: { marginBottom: 4 },
-  featuredPosterWrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: T.borderSoft },
+  featuredPosterWrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(139,92,246,0.18)' },
   featuredPosterWrapActive: { shadowColor: T.purple, shadowOpacity: 0.5, shadowRadius: 20, elevation: 12 },
   posterDarkGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'rgba(5,5,6,0.4)', borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   imdbBadge: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.72)' },
@@ -518,7 +591,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: T.text, fontSize: 18, fontWeight: '900', letterSpacing: -0.6 },
   sectionViewAll: { color: '#b58cff', fontSize: 14, fontWeight: '800' },
   card: { width: 122, marginRight: 16 },
-  cardPosterWrap: { width: 122, height: 178, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: T.borderSoft, backgroundColor: T.bgSoft },
+  cardPosterWrap: { width: 122, height: 178, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(139,92,246,0.15)', backgroundColor: T.bgSoft },
   cardTitle: { color: T.textSoft, fontSize: 12, fontWeight: '700', marginTop: 8, lineHeight: 16 },
   ratingBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4 },
   ratingBadgeText: { color: T.gold, fontSize: 11, fontWeight: '900' },
@@ -535,4 +608,6 @@ const styles = StyleSheet.create({
   moodDot: { width: 6, height: 6, borderRadius: 3, marginLeft: 2 },
   skeletonRow: { flexDirection: 'row', paddingLeft: 24, gap: 16 },
   skeletonCard: { width: 122, height: 178, borderRadius: 18, backgroundColor: T.glass, borderWidth: 1, borderColor: T.borderSoft },
+  moodLoadingWrap: { paddingHorizontal: 24, paddingTop: 28, paddingBottom: 28, alignItems: 'center', justifyContent: 'center', minHeight: 120 },
+  moodLoadingText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.1, textAlign: 'center' },
 });
