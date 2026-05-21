@@ -1,6 +1,6 @@
 # 🎬 CineMatch
 
-**Film zevkine göre insanları buluşturan mobil uygulama.**
+**Film zevkine göre insanları buluşturan mobil uygulama.**  
 TMDB entegrasyonu, gerçek zamanlı mesajlaşma ve akıllı eşleştirme algoritmasıyla.
 
 ---
@@ -10,12 +10,13 @@ TMDB entegrasyonu, gerçek zamanlı mesajlaşma ve akıllı eşleştirme algorit
 - 🃏 **Swipe eşleştirme** — Tinder benzeri kart sistemiyle kullanıcı keşfi
 - 🎬 **Film bazlı uyum skoru** — Ortak film zevkine göre % uyum hesaplama
 - 🔍 **Keşfet** — TMDB'den trend, klasik ve kişiselleştirilmiş film önerileri
-- 📖 **Film Listem** — İzlediğin filmleri kaydet, infinite scroll ile tüm kategorileri gez
+- 📖 **Film Listem** — İzlediğin filmleri kaydet, tüm kategorileri gez
 - 💬 **Gerçek zamanlı mesajlaşma** — Socket.io ile anlık chat, yazıyor bildirimi
 - ❤️ **CineMatch Puanı** — Topluluk oylarıyla oluşan özgün film sıralama sistemi
-- 🎭 **TMDB Profil Avatarı** — Favori oyuncu veya karakteri avatar olarak seç
+- 📊 **İstatistikler** — Film zevkine dair kişisel istatistik ekranı
+- 🎭 **Oyuncu Profilleri** — TMDB'den oyuncu detayları ve filmografisi
 - 🖼️ **Fotoğraf yükleme** — Cloudflare R2 destekli profil fotoğrafı
-- 🔔 **Push Bildirimleri** — Expo Notifications ile eşleşme ve mesaj bildirimleri
+- 📋 **İzleme Listesi** — Sonra izlemek istediğin filmleri kaydet
 - 🚫 **Kullanıcı engelleme** — Engellenen kullanıcılar keşiften çıkar
 
 ---
@@ -42,7 +43,7 @@ TMDB entegrasyonu, gerçek zamanlı mesajlaşma ve akıllı eşleştirme algorit
 - Node.js 18+
 - PostgreSQL (ya da Supabase) — geliştirme için SQLite de çalışır
 - [TMDB API anahtarı](https://www.themoviedb.org/settings/api)
-- Cloudflare R2 bucket (avatar/fotoğraf yükleme için)
+- Cloudflare R2 bucket (fotoğraf yükleme için)
 - Expo Go uygulaması (iOS / Android)
 
 ---
@@ -109,15 +110,13 @@ cd mobile
 npm install
 ```
 
-`mobile/src/services/api.js` içindeki `API_URL`'i kendi backend adresinle güncelle:
+`mobile/.env` dosyasını oluştur:
 
-```js
-// Emülatör için
-const API_URL = 'http://10.0.2.2:3000/api';
-
-// Fiziksel cihaz için (backend'in yerel IP'si)
-const API_URL = 'http://192.168.x.x:3000/api';
+```env
+API_URL=http://192.168.x.x:3000/api
 ```
+
+> Emülatör kullanıyorsan `http://10.0.2.2:3000/api`, fiziksel cihaz için kendi yerel IP adresini yaz.
 
 Expo'yu başlat:
 
@@ -140,6 +139,7 @@ cinematch/
 │   │   ├── services/        # TMDB, kullanıcı, film servisleri
 │   │   ├── middleware/      # Auth, validation, hata yönetimi
 │   │   ├── validators/      # Zod şemaları
+│   │   ├── socket/          # Socket.io event handler'ları
 │   │   └── utils/           # Cache ve yardımcılar
 │   └── prisma/              # Veritabanı şeması ve migration'lar
 └── mobile/
@@ -147,7 +147,7 @@ cinematch/
         ├── screens/         # Tüm ekranlar
         ├── navigation/      # Stack + Tab navigator
         ├── services/        # API client, socket, token
-        ├── context/         # Global state
+        ├── context/         # Global state (Auth, Theme)
         └── components/      # Paylaşılan bileşenler
 ```
 
@@ -164,7 +164,7 @@ cinematch/
 ### Kullanıcı
 | Method | Endpoint | Açıklama |
 |---|---|---|
-| GET | `/api/users/profile` | Kendi profili getir |
+| GET | `/api/users/profile` | Kendi profilini getir |
 | PUT | `/api/users/profile` | Profil güncelle |
 | GET | `/api/users/discover` | Eşleştirme için kullanıcı keşfi |
 | GET | `/api/users/:id/profile` | Başka kullanıcının profili |
@@ -174,10 +174,10 @@ cinematch/
 |---|---|---|
 | GET | `/api/movies/my` | Kendi film listesi |
 | POST | `/api/movies/add` | Film ekle |
-| GET | `/api/movies/trending?page=1` | Trend filmler |
+| GET | `/api/movies/trending` | Trend filmler |
 | GET | `/api/movies/suggestions` | Kişiselleştirilmiş öneriler |
 | GET | `/api/movies/top-rated-cinematch` | CineMatch sıralaması |
-| GET | `/api/movies/classics?page=1` | Klasikler |
+| GET | `/api/movies/classics` | Klasikler |
 | GET | `/api/movies/search?q=...` | Film ara |
 
 ### Eşleştirme
@@ -193,6 +193,12 @@ cinematch/
 |---|---|---|
 | GET | `/api/messages/:matchId` | Mesajları getir |
 | POST | `/api/messages/:matchId` | Mesaj gönder |
+
+### Diğer
+| Method | Endpoint | Açıklama |
+|---|---|---|
+| GET | `/api/person/:id` | Oyuncu detayı (TMDB) |
+| POST | `/api/upload` | Profil fotoğrafı yükle |
 
 ---
 
@@ -215,7 +221,7 @@ cinematch/
 - `.env` dosyaları asla commit edilmez
 - JWT secret minimum 48 byte kriptografik rastgele değer olmalı
 - Şifreler bcrypt ile hash'lenir (salt rounds: 12)
-- Avatar ve fotoğraflar Cloudflare R2'de saklanır, veritabanında yalnızca URL tutulur
+- Fotoğraflar Cloudflare R2'de saklanır, veritabanında yalnızca URL tutulur
 - Tüm input'lar Zod şemalarıyla validate edilir
 
 ---
@@ -223,4 +229,3 @@ cinematch/
 ## Lisans
 
 MIT
-
