@@ -25,15 +25,27 @@ export function ThemeProvider({ children }) {
   }, []);
 
   const toggleTheme = async () => {
+    if (activeMovieThemeId) return false;
     const newMode = !isDark;
     setIsDark(newMode);
     await AsyncStorage.setItem('userTheme', newMode ? 'dark' : 'light');
+    return true;
+  };
+
+  const setThemeMode = async (mode) => {
+    if (activeMovieThemeId) return false;
+    const nextIsDark = mode !== 'light';
+    setIsDark(nextIsDark);
+    await AsyncStorage.setItem('userTheme', nextIsDark ? 'dark' : 'light');
+    return true;
   };
 
   // Film teması seç (null geçilirse default'a döner)
   const setMovieTheme = async (themeId) => {
     setActiveMovieThemeId(themeId);
     if (themeId) {
+      setIsDark(true);
+      await AsyncStorage.setItem('userTheme', 'dark');
       await AsyncStorage.setItem('movieTheme', themeId);
     } else {
       await AsyncStorage.removeItem('movieTheme');
@@ -51,6 +63,7 @@ export function ThemeProvider({ children }) {
         theme,
         isDark,
         toggleTheme,
+        setThemeMode,
         movieTheme,          // aktif film teması objesi (null = default)
         setMovieTheme,       // (themeId: string | null) => void
         activeMovieThemeId,

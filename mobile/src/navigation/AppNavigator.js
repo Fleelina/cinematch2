@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -86,7 +86,24 @@ function CardsIcon({ focused, activeColor, inactiveColor }) {
   );
 }
 
-function TabIcon({ name, focused, activeColor, inactiveColor, nav, themeColors, movieTheme }) {
+const TAB_PRESS_LOCK_MS = 280;
+
+function DebouncedTabBarButton({ onPress, ...props }) {
+  const lockedRef = useRef(false);
+
+  const handlePress = (event) => {
+    if (lockedRef.current) return;
+    lockedRef.current = true;
+    onPress?.(event);
+    setTimeout(() => {
+      lockedRef.current = false;
+    }, TAB_PRESS_LOCK_MS);
+  };
+
+  return <Pressable {...props} onPress={handlePress} />;
+}
+
+const TabIcon = memo(function TabIcon({ name, focused, activeColor, inactiveColor, nav, themeColors, movieTheme }) {
   const meta = TAB_ITEMS[name] || TAB_ITEMS.Filmlerim;
   const glow = nav.glow || activeColor;
   const activePill = nav.activePill || themeColors.primarySoft || themeColors.purpleSoft || 'rgba(255,255,255,0.10)';
@@ -139,7 +156,7 @@ function TabIcon({ name, focused, activeColor, inactiveColor, nav, themeColors, 
       ) : null}
     </View>
   );
-}
+});
 
 function HamburgerButton({ onPress }) {
   return (
@@ -207,6 +224,7 @@ function MainTabs() {
       shadowOffset: { width: 0, height: 10 },
     },
     tabBarItemStyle: { flex: 1 },
+    tabBarButton: (props) => <DebouncedTabBarButton {...props} />,
     tabBarBackground: () => (
       <View style={[styles.tabBarBackground, { borderColor }]}>
         <LinearGradient
@@ -221,6 +239,7 @@ function MainTabs() {
     tabBarActiveTintColor: activeColor,
     tabBarInactiveTintColor: inactiveColor,
     lazy: true,
+    freezeOnBlur: true,
     tabBarShowLabel: false,
     tabBarIcon: ({ focused }) => (
       <TabIcon

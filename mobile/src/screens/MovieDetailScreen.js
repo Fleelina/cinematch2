@@ -1,51 +1,73 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
-  View, Text, Image, ScrollView, StyleSheet,
+  View, Text, Image, ScrollView, StyleSheet, ImageBackground,
   ActivityIndicator, TouchableOpacity, FlatList, Alert
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
 import CineMatchRating from '../components/CineMatchRating';
+import { useTheme } from '../context/ThemeContext';
+
+const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
+
+const DEFAULT_T = {
+  bg: '#0f0f0f',
+  bgSoft: '#1c1c1c',
+  glass: 'rgba(255,255,255,0.06)',
+  glassStrong: '#181818',
+  border: '#242424',
+  borderSoft: '#2e2e2e',
+  red: '#E50914',
+  redSoft: '#5a0a0f',
+  text: '#ffffff',
+  textSoft: '#bbbbbb',
+  textMuted: '#888888',
+  gold: '#FFD700',
+  link: '#1d9bf0',
+};
+
+let styles = createStyles(DEFAULT_T);
 
 // Skeleton placeholder kutusu
-function Skeleton({ width, height, borderRadius = 8, style }) {
+function Skeleton({ width, height, borderRadius = 8, style, T = DEFAULT_T }) {
   return (
     <View style={[
-      { width, height, borderRadius, backgroundColor: '#1e1e1e' },
+      { width, height, borderRadius, backgroundColor: T.glassStrong },
       style,
     ]} />
   );
 }
 
-function MovieDetailSkeleton() {
+function MovieDetailSkeleton({ T }) {
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#0f0f0f' }}>
+    <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }}>
       {/* Backdrop */}
-      <Skeleton width="100%" height={220} borderRadius={0} />
+      <Skeleton width="100%" height={220} borderRadius={0} T={T} />
       <View style={{ padding: 16, marginTop: -20 }}>
         {/* Header */}
         <View style={{ flexDirection: 'row', gap: 14, marginBottom: 16 }}>
-          <Skeleton width={110} height={160} borderRadius={12} style={{ marginTop: -40 }} />
+          <Skeleton width={110} height={160} borderRadius={12} style={{ marginTop: -40 }} T={T} />
           <View style={{ flex: 1, paddingTop: 8, gap: 8 }}>
-            <Skeleton width="90%" height={20} />
-            <Skeleton width="60%" height={14} />
-            <Skeleton width="50%" height={14} />
-            <Skeleton width="70%" height={14} />
+            <Skeleton width="90%" height={20} T={T} />
+            <Skeleton width="60%" height={14} T={T} />
+            <Skeleton width="50%" height={14} T={T} />
+            <Skeleton width="70%" height={14} T={T} />
           </View>
         </View>
         {/* Buton */}
-        <Skeleton width="100%" height={48} borderRadius={12} style={{ marginBottom: 8 }} />
-        <Skeleton width="60%" height={12} borderRadius={6} style={{ alignSelf: 'center', marginBottom: 20 }} />
+        <Skeleton width="100%" height={48} borderRadius={12} style={{ marginBottom: 8 }} T={T} />
+        <Skeleton width="60%" height={12} borderRadius={6} style={{ alignSelf: 'center', marginBottom: 20 }} T={T} />
         {/* Puan kutusu */}
-        <Skeleton width="100%" height={90} borderRadius={14} style={{ marginBottom: 20 }} />
+        <Skeleton width="100%" height={90} borderRadius={14} style={{ marginBottom: 20 }} T={T} />
         {/* Türler */}
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-          {[80, 60, 70].map((w, i) => <Skeleton key={i} width={w} height={28} borderRadius={20} />)}
+          {[80, 60, 70].map((w, i) => <Skeleton key={i} width={w} height={28} borderRadius={20} T={T} />)}
         </View>
         {/* Overview */}
-        <Skeleton width="40%" height={18} style={{ marginBottom: 10 }} />
-        <Skeleton width="100%" height={14} style={{ marginBottom: 6 }} />
-        <Skeleton width="100%" height={14} style={{ marginBottom: 6 }} />
-        <Skeleton width="80%" height={14} />
+        <Skeleton width="40%" height={18} style={{ marginBottom: 10 }} T={T} />
+        <Skeleton width="100%" height={14} style={{ marginBottom: 6 }} T={T} />
+        <Skeleton width="100%" height={14} style={{ marginBottom: 6 }} T={T} />
+        <Skeleton width="80%" height={14} T={T} />
       </View>
     </ScrollView>
   );
@@ -53,6 +75,30 @@ function MovieDetailSkeleton() {
 
 export default function MovieDetailScreen({ route, navigation }) {
   const { tmdbId, title, poster: initialPoster, year: initialYear, showRatingPrompt, forceIsAdded } = route.params;
+  const { theme: themeColors, movieTheme, isDark } = useTheme();
+  const T = useMemo(() => ({
+    bg: themeColors.bg,
+    bgSoft: themeColors.bgSoft,
+    glass: themeColors.glass,
+    glassStrong: themeColors.glassStrong || themeColors.glass,
+    border: themeColors.border,
+    borderSoft: themeColors.borderSoft,
+    red: themeColors.red || '#E50914',
+    redSoft: themeColors.redSoft || 'rgba(255,59,85,0.14)',
+    text: themeColors.textPrimary,
+    textSoft: themeColors.textSecondary,
+    textMuted: themeColors.textMuted,
+    gold: themeColors.gold || '#FFD700',
+    link: themeColors.primary || themeColors.purple || '#1d9bf0',
+  }), [themeColors]);
+  styles = useMemo(() => createStyles(T), [T]);
+  const useMovieBackgroundImage = isDark && movieTheme?.id !== 'dune' && movieTheme?.backgroundImage;
+  const backgroundImage = useMovieBackgroundImage ? movieTheme.backgroundImage : (isDark && !movieTheme ? DEFAULT_BACKGROUND : null);
+  const gradientColors = useMovieBackgroundImage
+    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
+    : (movieTheme?.gradient || (isDark
+        ? ['#050506', '#0B0B10', '#050506']
+        : ['#d7dce5', '#c8d0dc', '#b8c2d0']));
   const scrollRef = useRef(null);
   const ratingRef = useRef(null);
   const [movie, setMovie] = useState(null);
@@ -218,8 +264,9 @@ export default function MovieDetailScreen({ route, navigation }) {
     // initialPoster varsa hemen poster+başlık göster, arka planda yüklensin
     if (initialPoster) {
       return (
-        <ScrollView style={{ flex: 1, backgroundColor: '#0f0f0f' }}>
-          <View style={{ width: '100%', height: 220, backgroundColor: '#1c1c1c' }} />
+        <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
+        <ScrollView style={{ flex: 1, backgroundColor: 'transparent' }}>
+          <View style={{ width: '100%', height: 220, backgroundColor: T.bgSoft }} />
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.backBtnText}>← Geri</Text>
           </TouchableOpacity>
@@ -232,24 +279,32 @@ export default function MovieDetailScreen({ route, navigation }) {
               <View style={{ flex: 1, paddingTop: 8, gap: 8 }}>
                 <Text style={styles.title}>{title}</Text>
                 {initialYear && <Text style={styles.meta}>{initialYear}</Text>}
-                <View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: '#1e1e1e' }} />
-                <View style={{ width: 100, height: 12, borderRadius: 6, backgroundColor: '#1e1e1e' }} />
+                <View style={{ width: 80, height: 12, borderRadius: 6, backgroundColor: T.glassStrong }} />
+                <View style={{ width: 100, height: 12, borderRadius: 6, backgroundColor: T.glassStrong }} />
               </View>
             </View>
-            <View style={{ width: '100%', height: 48, borderRadius: 12, backgroundColor: '#1e1e1e', marginBottom: 20 }} />
-            <View style={{ width: '100%', height: 90, borderRadius: 14, backgroundColor: '#1e1e1e' }} />
+            <View style={{ width: '100%', height: 48, borderRadius: 12, backgroundColor: T.glassStrong, marginBottom: 20 }} />
+            <View style={{ width: '100%', height: 90, borderRadius: 14, backgroundColor: T.glassStrong }} />
           </View>
         </ScrollView>
+        </ThemeShell>
       );
     }
-    return <MovieDetailSkeleton />;
+    return (
+      <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
+        <MovieDetailSkeleton T={T} />
+      </ThemeShell>
+    );
   }
 
   if (!movie) return (
-    <View style={styles.center}><Text style={styles.errorText}>Film bilgisi yüklenemedi</Text></View>
+    <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
+      <View style={styles.center}><Text style={styles.errorText}>Film bilgisi yüklenemedi</Text></View>
+    </ThemeShell>
   );
 
   return (
+    <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
     <ScrollView ref={scrollRef} style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Backdrop */}
       {movie.backdrop
@@ -330,7 +385,7 @@ export default function MovieDetailScreen({ route, navigation }) {
             <View style={styles.myRatingBox}>
               <Text style={styles.myRatingLabel}>Senin puanın</Text>
               {ratingLoading
-                ? <ActivityIndicator color="#E50914" size="small" />
+                ? <ActivityIndicator color={T.red} size="small" />
                 : <Text style={styles.myRatingValue}>
                     {movie.userRating ? movie.userRating : '—'}
                   </Text>
@@ -390,7 +445,7 @@ export default function MovieDetailScreen({ route, navigation }) {
               disabled={translating}
             >
               {translating
-                ? <ActivityIndicator size="small" color="#1d9bf0" />
+                ? <ActivityIndicator size="small" color={T.link} />
                 : <Text style={styles.translateBtnText}>
                     {overviewTranslated ? '🌐 Show original' : '🌐 Türkçeye çevir'}
                   </Text>
@@ -428,15 +483,28 @@ export default function MovieDetailScreen({ route, navigation }) {
         <View style={{ height: 32 }} />
       </View>
     </ScrollView>
+    </ThemeShell>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f' },
-  center: { flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' },
-  errorText: { color: '#fff', fontSize: 16 },
+function ThemeShell({ children, backgroundImage, gradientColors }) {
+  const content = <LinearGradient colors={gradientColors} style={styles.shell}>{children}</LinearGradient>;
+  if (!backgroundImage) return <View style={styles.shell}>{content}</View>;
+  return (
+    <ImageBackground source={backgroundImage} style={styles.shell} resizeMode="cover">
+      {content}
+    </ImageBackground>
+  );
+}
+
+function createStyles(T) {
+  return StyleSheet.create({
+  shell: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { color: T.text, fontSize: 16 },
   backdrop: { width: '100%', height: 220 },
-  backdropPlaceholder: { width: '100%', height: 220, backgroundColor: '#1c1c1c' },
+  backdropPlaceholder: { width: '100%', height: 220, backgroundColor: T.bgSoft },
   backBtn: {
     position: 'absolute', top: 44, left: 16,
     backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20,
@@ -448,47 +516,47 @@ const styles = StyleSheet.create({
   poster: { width: 110, height: 160, borderRadius: 12, marginTop: -40 },
   posterPlaceholder: {
     width: 110, height: 160, borderRadius: 12, marginTop: -40,
-    backgroundColor: '#1c1c1c', justifyContent: 'center', alignItems: 'center'
+    backgroundColor: T.bgSoft, justifyContent: 'center', alignItems: 'center'
   },
   headerInfo: { flex: 1, paddingTop: 8 },
-  title: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  originalTitle: { color: '#888', fontSize: 13, marginBottom: 6, fontStyle: 'italic' },
-  meta: { color: '#aaa', fontSize: 13, marginBottom: 6 },
+  title: { color: T.text, fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  originalTitle: { color: T.textMuted, fontSize: 13, marginBottom: 6, fontStyle: 'italic' },
+  meta: { color: T.textSoft, fontSize: 13, marginBottom: 6 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
   star: { fontSize: 14 },
-  imdbRating: { color: '#FFD700', fontWeight: 'bold', fontSize: 14 },
-  imdbLabel: { color: '#888', fontSize: 11 },
-  director: { color: '#ccc', fontSize: 13 },
-  directorLink: { color: '#E50914', fontWeight: '600', textDecorationLine: 'underline' },
+  imdbRating: { color: T.gold, fontWeight: 'bold', fontSize: 14 },
+  imdbLabel: { color: T.textMuted, fontSize: 11 },
+  director: { color: T.textSoft, fontSize: 13 },
+  directorLink: { color: T.red, fontWeight: '600', textDecorationLine: 'underline' },
   toggleBtn: {
-    backgroundColor: '#E50914', borderRadius: 12, padding: 14,
+    backgroundColor: T.red, borderRadius: 12, padding: 14,
     alignItems: 'center', marginBottom: 8,
   },
-  toggleBtnAdded: { backgroundColor: '#333', borderWidth: 1, borderColor: '#555' },
+  toggleBtnAdded: { backgroundColor: T.glassStrong, borderWidth: 1, borderColor: T.border },
   toggleBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   watchlistBtn: {
     borderRadius: 12, padding: 12, alignItems: 'center', marginBottom: 8,
-    borderWidth: 1, borderColor: '#444', backgroundColor: 'transparent',
+    borderWidth: 1, borderColor: T.border, backgroundColor: 'transparent',
   },
-  watchlistBtnDone: { borderColor: '#2a2a2a', opacity: 0.6 },
-  watchlistBtnText: { color: '#ccc', fontWeight: '600', fontSize: 14 },
-  addedByText: { color: '#888', fontSize: 12, textAlign: 'center', marginBottom: 20 },
+  watchlistBtnDone: { borderColor: T.borderSoft, opacity: 0.6 },
+  watchlistBtnText: { color: T.textSoft, fontWeight: '600', fontSize: 14 },
+  addedByText: { color: T.textMuted, fontSize: 12, textAlign: 'center', marginBottom: 20 },
 
   // CineMatch Puanı
   cinematchBox: {
-    backgroundColor: '#181818',
+    backgroundColor: T.glassStrong,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#242424',
+    borderColor: T.border,
     gap: 10,
   },
   cinematchBoxHighlight: {
-    borderColor: '#E50914',
+    borderColor: T.red,
     borderWidth: 1.5,
-    shadowColor: '#E50914',
+    shadowColor: T.red,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -501,7 +569,7 @@ const styles = StyleSheet.create({
   cinematchDivider: {
     width: 1,
     height: 32,
-    backgroundColor: '#2e2e2e',
+    backgroundColor: T.borderSoft,
     marginHorizontal: 14,
   },
   myRatingBox: {
@@ -509,13 +577,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   myRatingLabel: {
-    color: '#666',
+    color: T.textMuted,
     fontSize: 11,
     marginBottom: 2,
     letterSpacing: 0.3,
   },
   myRatingValue: {
-    color: '#fff',
+    color: T.text,
     fontSize: 22,
     fontWeight: '700',
   },
@@ -528,36 +596,37 @@ const styles = StyleSheet.create({
     marginHorizontal: 1.5,
     height: 30,
     borderRadius: 6,
-    backgroundColor: '#242424',
+    backgroundColor: T.glass,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scoreBtnActive: {
-    backgroundColor: '#E50914',
+    backgroundColor: T.red,
   },
   scoreBtnPast: {
-    backgroundColor: '#5a0a0f',
+    backgroundColor: T.redSoft,
   },
-  scoreBtnText: { color: '#555', fontSize: 11, fontWeight: '700' },
+  scoreBtnText: { color: T.textMuted, fontSize: 11, fontWeight: '700' },
   scoreBtnTextActive: { color: '#fff' },
 
   genreRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   genreTag: {
-    backgroundColor: '#1c1c1c', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#333'
+    backgroundColor: T.glass, borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.border
   },
-  genreText: { color: '#ccc', fontSize: 12 },
+  genreText: { color: T.textSoft, fontSize: 12 },
   section: { marginBottom: 24 },
-  sectionTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
-  overview: { color: '#bbb', fontSize: 14, lineHeight: 22 },
+  sectionTitle: { color: T.text, fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
+  overview: { color: T.textSoft, fontSize: 14, lineHeight: 22 },
   translateBtn: { marginTop: 8, alignSelf: 'flex-start', paddingVertical: 4 },
-  translateBtnText: { color: '#1d9bf0', fontSize: 13, fontWeight: '600' },
+  translateBtnText: { color: T.link, fontSize: 13, fontWeight: '600' },
   castCard: { width: 90, marginRight: 12, alignItems: 'center' },
   castPhoto: { width: 70, height: 100, borderRadius: 10, marginBottom: 6 },
   castPhotoPlaceholder: {
     width: 70, height: 100, borderRadius: 10, marginBottom: 6,
-    backgroundColor: '#1c1c1c', justifyContent: 'center', alignItems: 'center'
+    backgroundColor: T.bgSoft, justifyContent: 'center', alignItems: 'center'
   },
-  castName: { color: '#fff', fontSize: 11, textAlign: 'center', fontWeight: '600' },
-  castCharacter: { color: '#888', fontSize: 10, textAlign: 'center' },
+  castName: { color: T.text, fontSize: 11, textAlign: 'center', fontWeight: '600' },
+  castCharacter: { color: T.textMuted, fontSize: 10, textAlign: 'center' },
 });
+}

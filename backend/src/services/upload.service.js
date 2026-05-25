@@ -49,6 +49,9 @@ const extractKeyFromUrl = (url) => {
   try {
     const normalizedUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
     const { pathname } = new URL(normalizedUrl);
+    const parts = pathname.split('/').filter(Boolean);
+    const avatarFileIndex = parts.findIndex((part, index) => part === 'avatar-file' && parts[index + 1]);
+    if (avatarFileIndex !== -1) return `avatars/${decodeURIComponent(parts[avatarFileIndex + 1])}`;
     return pathname.startsWith('/') ? pathname.slice(1) : pathname;
   } catch {
     return null;

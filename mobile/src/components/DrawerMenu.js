@@ -25,8 +25,26 @@ const MENU_ITEMS = [
 
 export default function DrawerMenu({ visible, onClose }) {
   const { user, logout } = useAuth();
-  const { theme, isDark, toggleTheme } = useTheme(); // 3. Aktif tema ve değiştirme fonksiyonu çekildi
+  const { theme, isDark, toggleTheme, movieTheme, activeMovieThemeId } = useTheme(); // 3. Aktif tema ve değiştirme fonksiyonu çekildi
   const navigation = useNavigation();
+  const fallbackDrawerTheme = {
+    bg: isDark ? '#090a10' : theme.bgSoft,
+    border: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)',
+    borderSoft: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    glass: isDark ? 'rgba(255,255,255,0.08)' : theme.glass,
+    textPrimary: isDark ? '#ffffff' : '#111217',
+    textSecondary: isDark ? '#e7e7ef' : '#2b2e38',
+    textMuted: isDark ? '#a6a7b4' : '#687080',
+    accent: theme.purple || theme.red || '#ff3b55',
+    gold: theme.gold || '#f8c84a',
+  };
+  const themedDrawer = movieTheme?.drawer || {};
+  const drawerTheme = {
+    ...fallbackDrawerTheme,
+    ...themedDrawer,
+    bg: themedDrawer.background || themedDrawer.bg || fallbackDrawerTheme.bg,
+    textSecondary: themedDrawer.textSecondary || themedDrawer.textSoft || fallbackDrawerTheme.textSecondary,
+  };
   const slideAnim = useRef(new Animated.Value(-drawerWidth)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -71,12 +89,12 @@ export default function DrawerMenu({ visible, onClose }) {
       {/* 4. Çekmece arka planı dinamik olarak theme.bgSoft yapıldı */}
       <Animated.View style={[
         styles.drawer, 
-        { backgroundColor: theme.bgSoft, borderRightColor: theme.border, transform: [{ translateX: slideAnim }] }
+        { backgroundColor: drawerTheme.bg, borderRightColor: drawerTheme.border, transform: [{ translateX: slideAnim }] }
       ]}>
         
         {/* Üst Çizgi Aksanı Modun Rengine Göre Değişir */}
-        <View style={[styles.drawerAccent, { backgroundColor: theme.purple }]} />
-        <Text style={[styles.drawerLogo, { color: theme.purple }]}>CineMatch</Text>
+        <View style={[styles.drawerAccent, { backgroundColor: drawerTheme.accent }]} />
+        <Text style={[styles.drawerLogo, { color: drawerTheme.accent }]}>CineMatch</Text>
 
         {/* Profil Alanı */}
         <TouchableOpacity
@@ -84,17 +102,17 @@ export default function DrawerMenu({ visible, onClose }) {
           onPress={() => navigate('MyProfile')}
           activeOpacity={0.8}
         >
-          <DrawerAvatar user={user} theme={theme} />
+          <DrawerAvatar user={user} theme={{ ...theme, purple: drawerTheme.accent }} />
           <View style={styles.profileInfo}>
-            <Text style={[styles.profileName, { color: theme.textPrimary }]}>{user?.name}</Text>
+            <Text style={[styles.profileName, { color: drawerTheme.textPrimary }]}>{user?.name}</Text>
             {user?.username ? (
-              <Text style={[styles.profileUsername, { color: theme.purple }]}>@{user.username}</Text>
+              <Text style={[styles.profileUsername, { color: drawerTheme.accent }]}>@{user.username}</Text>
             ) : null}
           </View>
-          <Feather name="chevron-right" size={20} color={theme.textMuted} />
+          <Feather name="chevron-right" size={20} color={drawerTheme.textMuted} />
         </TouchableOpacity>
 
-        <View style={[styles.divider, { backgroundColor: theme.borderSoft }]} />
+        <View style={[styles.divider, { backgroundColor: drawerTheme.borderSoft }]} />
 
         {/* Menü Listesi */}
         <View style={styles.menuList}>
@@ -105,38 +123,43 @@ export default function DrawerMenu({ visible, onClose }) {
               onPress={() => navigate(item.screen)}
               activeOpacity={0.7}
             >
-              <View style={[styles.menuIconWrap, { backgroundColor: theme.glass, borderColor: theme.border }]}>
-                <Feather name={item.icon} size={16} color={theme.textSoft} />
+              <View style={[styles.menuIconWrap, { backgroundColor: drawerTheme.glass, borderColor: drawerTheme.border }]}>
+                <Feather name={item.icon} size={16} color={drawerTheme.icon || drawerTheme.textSecondary} />
               </View>
-              <Text style={[styles.menuLabel, { color: theme.textSoft }]}>{item.label}</Text>
-              <Feather name="chevron-right" size={16} color={theme.textMuted} />
+              <Text style={[styles.menuLabel, { color: drawerTheme.textSecondary }]}>{item.label}</Text>
+              <Feather name="chevron-right" size={16} color={drawerTheme.chevron || drawerTheme.textMuted} />
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={[styles.divider, { backgroundColor: theme.borderSoft }]} />
+        <View style={[styles.divider, { backgroundColor: drawerTheme.borderSoft }]} />
 
         {/* TEMA DEĞİŞTİRME BUTONU (YENİ KISIM) */}
-        <TouchableOpacity style={styles.menuItem} onPress={toggleTheme} activeOpacity={0.7}>
-          <View style={[styles.menuIconWrap, { backgroundColor: theme.glass, borderColor: theme.border }]}>
-            <Feather name={isDark ? "sun" : "moon"} size={16} color={isDark ? theme.gold : theme.purple} />
+        <TouchableOpacity
+          style={[styles.menuItem, activeMovieThemeId && styles.menuItemDisabled]}
+          onPress={toggleTheme}
+          activeOpacity={0.7}
+          disabled={!!activeMovieThemeId}
+        >
+          <View style={[styles.menuIconWrap, { backgroundColor: drawerTheme.glass, borderColor: drawerTheme.border }]}>
+            <Feather name={isDark ? "sun" : "moon"} size={16} color={isDark ? drawerTheme.gold : drawerTheme.accent} />
           </View>
-          <Text style={[styles.menuLabel, { color: theme.textSoft }]}>
-            {isDark ? 'Aydınlık Mod' : 'Karanlık Mod'}
+          <Text style={[styles.menuLabel, { color: drawerTheme.textSecondary }]}>
+            {activeMovieThemeId ? 'Aydınlık Mod (Default)' : (isDark ? 'Aydınlık Mod' : 'Karanlık Mod')}
           </Text>
         </TouchableOpacity>
 
-        <View style={[styles.divider, { backgroundColor: theme.borderSoft }]} />
+        <View style={[styles.divider, { backgroundColor: drawerTheme.borderSoft }]} />
 
         {/* Çıkış Yap */}
         <TouchableOpacity style={styles.logoutItem} onPress={handleLogout} activeOpacity={0.7}>
           <View style={styles.menuIconWrapEmpty}>
-            <Feather name="log-out" size={16} color={theme.textMuted} />
+            <Feather name="log-out" size={16} color={drawerTheme.textMuted} />
           </View>
-          <Text style={[styles.logoutLabel, { color: theme.textMuted }]}>Çıkış Yap</Text>
+          <Text style={[styles.logoutLabel, { color: drawerTheme.textMuted }]}>Çıkış Yap</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.versionText, { color: theme.textMuted }]}>CineMatch v1.0</Text>
+        <Text style={[styles.versionText, { color: drawerTheme.textMuted }]}>CineMatch v1.0</Text>
       </Animated.View>
     </View>
   );
@@ -222,6 +245,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     gap: 14,
+  },
+  menuItemDisabled: {
+    opacity: 0.42,
   },
   menuIconWrap: {
     width: 36,

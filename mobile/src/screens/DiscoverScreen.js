@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, FlatList, TextInput, TouchableOpacity,
   Image, ImageBackground, StyleSheet, ActivityIndicator, Alert, Animated,
-  Dimensions, Keyboard, KeyboardAvoidingView, Platform,
+  Dimensions, InteractionManager, Keyboard, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
@@ -17,7 +17,6 @@ const CARD_W = SCREEN_WIDTH * 0.8 * 0.58;
 const CARD_GAP = 16;
 const SNAP_W = CARD_W + CARD_GAP;
 const SIDE_PADDING = (SCREEN_WIDTH - CARD_W) / 2;
-const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
 
 const DEFAULT_T = {
   bg: '#050506',
@@ -36,6 +35,8 @@ const DEFAULT_T = {
 };
 
 let styles = createStyles(DEFAULT_T);
+let lastDiscoverSyncAt = 0;
+const DISCOVER_SYNC_INTERVAL_MS = 30000;
 
 function Poster({ uri, width = 112, height = 168, radius = 22, T }) {
   if (uri) return <Image source={{ uri }} style={{ width, height, borderRadius: radius, backgroundColor: T.bgSoft }} />;
@@ -150,7 +151,6 @@ function FeaturedCard({ item, isActive, onPress, onAdd, isAdded, animScale, anim
       <TouchableOpacity activeOpacity={0.92} onPress={() => onPress(item)}>
         <View style={[styles.featuredPosterWrap, { height: cardH }]}>
           <Poster uri={item.poster} width={CARD_W} height={cardH} radius={20} T={T} />
-          <View style={styles.posterDarkGradient} />
           {item.rating ? (
             <View style={styles.imdbBadge}>
               <Text style={styles.imdbMini}>IMDb</Text>
@@ -193,7 +193,6 @@ function MovieCard({ item, onPress, onAdd, showCinematch, isAdded, T }) {
       >
         <View style={styles.cardPosterWrap}>
           <Poster uri={item.poster} width={122} height={178} radius={18} T={T} />
-          <View style={styles.posterDarkGradient} />
           {showCinematch && item.cinematchRating
             ? <View style={styles.percentBadge}><Text style={styles.percentBadgeText}>❤ {item.cinematchRating}</Text></View>
             : item.rating ? <View style={styles.ratingBadge}><Text style={styles.ratingBadgeText}>★ {item.rating}</Text></View> : null
@@ -321,7 +320,7 @@ function SearchResultRow({ item, onDetail, onAdd, isAdded, T }) {
 
 export default function DiscoverScreen({ navigation }) {
   const { user, setUser } = useAuth();
-  const { theme: themeColors, movieTheme } = useTheme();
+  const { theme: themeColors, movieTheme, isDark } = useTheme();
   const { openDrawer } = useAppDrawer();
   const T = {
   bg: themeColors.bg,
@@ -342,8 +341,10 @@ export default function DiscoverScreen({ navigation }) {
   success: themeColors.success,
 };
   styles = React.useMemo(() => createStyles(T), [themeColors, movieTheme]);
-  const backgroundImage = movieTheme?.backgroundImage || DEFAULT_BACKGROUND;
-  const bgGradient = movieTheme?.gradient || [T.bg, T.bgSoft, T.bg];
+  const backgroundImage = movieTheme?.backgroundImage || null;
+  const bgGradient = movieTheme?.gradient || (isDark
+    ? ['#050506', '#0B0B10', '#050506']
+    : ['#d7dce5', '#c8d0dc', '#b8c2d0']);
   const overlayGradient = backgroundImage
     ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.58)', 'rgba(5,5,6,0.9)']
     : bgGradient;
@@ -376,8 +377,16 @@ export default function DiscoverScreen({ navigation }) {
   }, [avatarUri]);
 
   useFocusEffect(useCallback(() => {
-    api.get('/movies/my').then((r) => setMyMovieIds(new Set((r.data || []).map((m) => m.tmdbId)))).catch(() => {});
-    api.get('/users/profile').then((r) => setUser((prev) => ({ ...prev, ...r.data }))).catch(() => {});
+    const now = Date.now();
+    if (now - lastDiscoverSyncAt < DISCOVER_SYNC_INTERVAL_MS) return undefined;
+    lastDiscoverSyncAt = now;
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      api.get('/movies/my').then((r) => setMyMovieIds(new Set((r.data || []).map((m) => m.tmdbId)))).catch(() => {});
+      api.get('/users/profile').then((r) => setUser((prev) => ({ ...prev, ...r.data }))).catch(() => {});
+    });
+
+    return () => task.cancel();
   }, [setUser]));
 
   useEffect(() => {
@@ -629,7 +638,6 @@ function createStyles(T) {
   featuredCard: { marginBottom: 4 },
   featuredPosterWrap: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: T.border },
   featuredPosterWrapActive: { shadowColor: T.red, shadowOpacity: 0.28, shadowRadius: 20, elevation: 12 },
-  posterDarkGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'rgba(5,5,6,0.4)', borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   imdbBadge: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.72)' },
   imdbMini: { color: '#121212', backgroundColor: T.gold, fontSize: 8, fontWeight: '900', paddingHorizontal: 3, borderRadius: 2 },
   imdbText: { color: T.text, fontSize: 12, fontWeight: '800' },

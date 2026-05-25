@@ -2,12 +2,12 @@
 
 // 1. Sabit Temel Renk Paletleri
 const lightColors = {
-  bg: '#f8f9fa',
-  bgSoft: '#ffffff',
-  glass: 'rgba(0,0,0,0.03)',
-  glassStrong: 'rgba(0,0,0,0.06)',
-  border: 'rgba(0,0,0,0.08)',
-  borderSoft: 'rgba(0,0,0,0.04)',
+  bg: '#d7dce5',
+  bgSoft: '#c8d0dc',
+  glass: 'rgba(33,45,62,0.08)',
+  glassStrong: 'rgba(33,45,62,0.13)',
+  border: 'rgba(33,45,62,0.14)',
+  borderSoft: 'rgba(33,45,62,0.08)',
   
   red: '#ff3b55',
   redSoft: 'rgba(255,59,85,0.1)',

@@ -2,20 +2,47 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   Image, StyleSheet, ActivityIndicator, KeyboardAvoidingView,
-  Platform, Alert, ScrollView, Modal, Animated,
+  Platform, Alert, ScrollView, Modal, Animated, ImageBackground,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../services/api';
 import { getSocket, connectSocket, emitTyping, emitStopTyping } from '../services/socket';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
-function Avatar({ user, size = 36 }) {
+const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
+
+const DEFAULT_T = {
+  bg: '#0f0f0f',
+  bgSoft: '#1a1a1a',
+  surface: '#161616',
+  surfaceSoft: '#202124',
+  glass: 'rgba(255,255,255,0.06)',
+  border: '#262626',
+  borderSoft: '#1a1a1a',
+  red: '#E50914',
+  redSoft: '#261215',
+  redBorder: 'rgba(229,9,20,0.25)',
+  text: '#ffffff',
+  textSoft: '#d1d1d1',
+  textMuted: '#888888',
+  bubbleMe: '#C84A52',
+  bubbleThem: '#202124',
+  inputBg: '#1a1a1a',
+  shadow: '#000',
+  shadowOpacity: 0.12,
+};
+
+let styles = createStyles(DEFAULT_T);
+
+function Avatar({ user, size = 36, T = DEFAULT_T }) {
   if (user?.avatar) {
-    return <Image source={{ uri: user.avatar }} style={{ width: size, height: size, borderRadius: size / 2 }} />;
+    return <Image source={{ uri: user.avatar }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: T.bgSoft }} />;
   }
 
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#E50914', justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: T.red, justifyContent: 'center', alignItems: 'center' }}>
       <Text style={{ color: '#fff', fontWeight: '700', fontSize: size * 0.4 }}>{user?.name?.[0]?.toUpperCase()}</Text>
     </View>
   );
@@ -57,7 +84,35 @@ function MoviePoster({ movie, selected, onPress }) {
 export default function ChatScreen({ route, navigation }) {
   const { matchId, otherUser } = route.params;
   const { user } = useAuth();
+  const { theme: themeColors, movieTheme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const T = React.useMemo(() => ({
+    bg: themeColors.bg,
+    bgSoft: themeColors.bgSoft,
+    surface: isDark ? (themeColors.bgSoft || '#161616') : 'rgba(255,255,255,0.36)',
+    surfaceSoft: isDark ? '#202124' : 'rgba(255,255,255,0.58)',
+    glass: themeColors.glass,
+    border: themeColors.border,
+    borderSoft: themeColors.borderSoft,
+    red: themeColors.red || '#E50914',
+    redSoft: themeColors.redSoft || 'rgba(255,59,85,0.12)',
+    redBorder: themeColors.redBorder || 'rgba(255,59,85,0.26)',
+    text: themeColors.textPrimary,
+    textSoft: themeColors.textSecondary,
+    textMuted: themeColors.textMuted,
+    bubbleMe: themeColors.red || '#ff3b55',
+    bubbleThem: isDark ? (themeColors.bgSoft || '#202124') : 'rgba(255,255,255,0.72)',
+    inputBg: isDark ? (themeColors.bgSoft || '#1a1a1a') : 'rgba(255,255,255,0.72)',
+    shadow: isDark ? '#000' : 'rgba(33,45,62,0.28)',
+    shadowOpacity: isDark ? 0.12 : 0.1,
+  }), [themeColors, isDark]);
+  styles = React.useMemo(() => createStyles(T), [T]);
+  const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
+  const gradientColors = movieTheme?.backgroundImage
+    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
+    : (movieTheme?.gradient || (isDark
+        ? ['#050506', '#0B0B10', '#050506']
+        : ['#d7dce5', '#c8d0dc', '#b8c2d0']));
 
   const [messages, setMessages] = useState([]);
   const [commonMovies, setCommonMovies] = useState([]);
@@ -317,13 +372,16 @@ export default function ChatScreen({ route, navigation }) {
 
   if (loading) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
-        <ActivityIndicator color="#E50914" size="large" />
-      </View>
+      <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
+        <View style={[styles.center, { paddingTop: insets.top }]}>
+          <ActivityIndicator color={T.red} size="large" />
+        </View>
+      </ThemeShell>
     );
   }
 
   return (
+    <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView
         style={styles.flex}
@@ -338,7 +396,7 @@ export default function ChatScreen({ route, navigation }) {
             style={styles.headerUser}
             onPress={() => navigation.navigate('UserProfile', { userId: otherUser.id, matchId })}
           >
-            <Avatar user={otherUser} size={36} />
+            <Avatar user={otherUser} size={36} T={T} />
             <View>
               <Text style={styles.headerName}>{otherUser.name}</Text>
               {otherTyping ? <Text style={styles.typingHeader}>yaziyor...</Text> : null}
@@ -375,7 +433,7 @@ export default function ChatScreen({ route, navigation }) {
             if (item.itemType === 'typing') {
               return (
                 <View style={[styles.msgRow, styles.msgRowThem]}>
-                  <Avatar user={otherUser} size={28} />
+                  <Avatar user={otherUser} size={28} T={T} />
                   <View style={[styles.bubble, styles.bubbleThem, styles.typingBubble]}>
                     <Text style={styles.typingDots}>{'\u25CF \u25CF \u25CF'}</Text>
                   </View>
@@ -397,7 +455,7 @@ export default function ChatScreen({ route, navigation }) {
 
             return (
               <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowThem]}>
-                {!isMe ? <Avatar user={otherUser} size={28} /> : null}
+                {!isMe ? <Avatar user={otherUser} size={28} T={T} /> : null}
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onPress={() => handleDoubleTap(item.id)}
@@ -517,7 +575,7 @@ export default function ChatScreen({ route, navigation }) {
             value={text}
             onChangeText={handleTextChange}
             placeholder={selectedMovie ? `"${selectedMovie.title}" ile mesaj yaz...` : 'Mesaj yaz...'}
-            placeholderTextColor="#555"
+            placeholderTextColor={T.textMuted}
             multiline
             maxLength={1000}
           />
@@ -655,40 +713,53 @@ export default function ChatScreen({ route, navigation }) {
         </TouchableOpacity>
       </Modal>
     </View>
+    </ThemeShell>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f' },
+function ThemeShell({ children, backgroundImage, gradientColors }) {
+  const content = <LinearGradient colors={gradientColors} style={styles.themeShell}>{children}</LinearGradient>;
+  if (!backgroundImage) return <View style={styles.themeShell}>{content}</View>;
+  return (
+    <ImageBackground source={backgroundImage} style={styles.themeShell} resizeMode="cover">
+      {content}
+    </ImageBackground>
+  );
+}
+
+function createStyles(T) {
+  return StyleSheet.create({
+  themeShell: { flex: 1 },
+  container: { flex: 1 },
   flex: { flex: 1 },
-  center: { flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#0f0f0f',
+    backgroundColor: T.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    borderBottomColor: T.borderSoft,
   },
   backBtn: { padding: 6, marginRight: 2 },
-  backBtnText: { color: '#fff', fontSize: 24, fontWeight: '600' },
+  backBtnText: { color: T.text, fontSize: 24, fontWeight: '600' },
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  headerName: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  typingHeader: { color: '#888', fontSize: 11, marginTop: 1 },
+  headerName: { color: T.text, fontSize: 16, fontWeight: '700' },
+  typingHeader: { color: T.textMuted, fontSize: 11, marginTop: 1 },
   headerMenuBtn: {
     width: 34,
     height: 34,
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#171717',
+    backgroundColor: T.glass,
     borderWidth: 1,
-    borderColor: '#262626',
+    borderColor: T.border,
   },
   headerMenuBtnText: {
-    color: '#fff',
+    color: T.text,
     fontSize: 22,
     lineHeight: 22,
     marginTop: -3,
@@ -697,8 +768,8 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#161616',
-    backgroundColor: '#111',
+    borderBottomColor: T.borderSoft,
+    backgroundColor: T.surface,
   },
   commonMoviesCollapsedBar: {
     flexDirection: 'row',
@@ -708,17 +779,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: '#161616',
+    backgroundColor: T.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#232323',
+    borderColor: T.border,
   },
   commonMoviesCollapsedTitle: {
-    color: '#fff',
+    color: T.text,
     fontSize: 14,
     fontWeight: '700',
   },
   commonMoviesCollapsedAction: {
-    color: '#8d8d8d',
+    color: T.textMuted,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -731,9 +802,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 18,
-    backgroundColor: '#161616',
+    backgroundColor: T.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#252525',
+    borderColor: T.border,
   },
   commonMoviesHeaderLeft: {
     flex: 1,
@@ -743,15 +814,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  commonMoviesTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  commonMoviesCount: { color: '#7d7d7d', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  commonMoviesTitle: { color: T.text, fontSize: 15, fontWeight: '700' },
+  commonMoviesCount: { color: T.textMuted, fontSize: 11, fontWeight: '600', marginTop: 2 },
   expandChip: {
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: T.glass,
   },
-  expandChipText: { color: '#9e9e9e', fontSize: 11, fontWeight: '700' },
+  expandChipText: { color: T.textSoft, fontSize: 11, fontWeight: '700' },
   commonMoviesList: {
     paddingHorizontal: 12,
     gap: 10,
@@ -762,17 +833,17 @@ const styles = StyleSheet.create({
     minHeight: 88,
     borderRadius: 18,
     padding: 8,
-    backgroundColor: '#161616',
+    backgroundColor: T.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#262626',
+    borderColor: T.border,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   movieChipSelected: {
-    borderColor: '#E50914',
-    backgroundColor: '#261215',
-    shadowColor: '#E50914',
+    borderColor: T.red,
+    backgroundColor: T.redSoft,
+    shadowColor: T.red,
     shadowOpacity: 0.18,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
@@ -782,14 +853,14 @@ const styles = StyleSheet.create({
     width: 52,
     height: 72,
     borderRadius: 13,
-    backgroundColor: '#1c1c1c',
+    backgroundColor: T.bgSoft,
   },
   moviePosterFallback: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   moviePosterFallbackText: {
-    color: '#fff',
+    color: T.text,
     fontSize: 20,
     fontWeight: '700',
   },
@@ -805,38 +876,38 @@ const styles = StyleSheet.create({
   },
   movieTitle: {
     flex: 1,
-    color: '#d1d1d1',
+    color: T.textSoft,
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 17,
   },
   movieTitleSelected: {
-    color: '#fff',
+    color: T.text,
   },
   movieSubline: {
-    color: '#7f7f7f',
+    color: T.textMuted,
     fontSize: 11,
     fontWeight: '600',
   },
   movieSublineSelected: {
-    color: '#f0b9bf',
+    color: T.red,
   },
   movieMiniAction: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#222',
+    backgroundColor: T.glass,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#303030',
+    borderColor: T.border,
   },
   movieMiniActionSelected: {
-    backgroundColor: '#E50914',
-    borderColor: '#E50914',
+    backgroundColor: T.red,
+    borderColor: T.red,
   },
   movieMiniActionText: {
-    color: '#aaa',
+    color: T.textMuted,
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 16,
@@ -847,16 +918,16 @@ const styles = StyleSheet.create({
   selectedMovieHint: {
     marginTop: 12,
     paddingHorizontal: 12,
-    color: '#bcbcbc',
+    color: T.textSoft,
     fontSize: 12,
   },
   msgList: { paddingHorizontal: 12, paddingVertical: 16, gap: 4, flexGrow: 1 },
   flatList: { flex: 1 },
   dateSeparator: { alignItems: 'center', marginVertical: 12 },
   dateSeparatorText: {
-    color: '#444',
+    color: T.textMuted,
     fontSize: 12,
-    backgroundColor: '#181818',
+    backgroundColor: T.glass,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 10,
@@ -864,15 +935,15 @@ const styles = StyleSheet.create({
   systemRow: { alignItems: 'center', marginVertical: 8 },
   systemBubble: {
     maxWidth: '88%',
-    backgroundColor: '#171717',
+    backgroundColor: T.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: T.border,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   systemText: {
-    color: '#cfcfcf',
+    color: T.textSoft,
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
@@ -904,31 +975,31 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 13,
     paddingVertical: 9,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
+    shadowColor: T.shadow,
+    shadowOpacity: T.shadowOpacity,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
-  bubbleMe: { backgroundColor: '#C84A52', borderBottomRightRadius: 7 },
-  bubbleThem: { backgroundColor: '#202124', borderBottomLeftRadius: 7 },
+  bubbleMe: { backgroundColor: T.bubbleMe, borderBottomRightRadius: 7 },
+  bubbleThem: { backgroundColor: T.bubbleThem, borderBottomLeftRadius: 7, borderWidth: 1, borderColor: T.border },
   bubbleTemp: { opacity: 0.5 },
   attachmentCard: {
     width: 238,
-    backgroundColor: '#151515',
+    backgroundColor: T.surfaceSoft,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#2b2b2b',
+    borderColor: T.border,
     padding: 9,
     gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
+    shadowColor: T.shadow,
+    shadowOpacity: T.shadowOpacity,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
   attachmentEyebrow: {
-    color: '#ff7d86',
+    color: T.red,
     fontSize: 9,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -943,7 +1014,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 72,
     borderRadius: 12,
-    backgroundColor: '#1d1d1d',
+    backgroundColor: T.bgSoft,
   },
   attachmentInfo: {
     flex: 1,
@@ -956,7 +1027,7 @@ const styles = StyleSheet.create({
   },
   attachmentTitle: {
     flex: 1,
-    color: '#fff',
+    color: T.text,
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 17,
@@ -965,28 +1036,28 @@ const styles = StyleSheet.create({
     minWidth: 68,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#3d3d3d',
+    borderColor: T.border,
     paddingVertical: 5,
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#191919',
+    backgroundColor: T.glass,
   },
   attachmentDetailBtnText: {
-    color: '#f5f5f5',
+    color: T.text,
     fontSize: 10,
     fontWeight: '800',
   },
-  bubbleText: { color: '#ececec', fontSize: 14, lineHeight: 20 },
+  bubbleText: { color: T.text, fontSize: 14, lineHeight: 20 },
   bubbleTextMe: { color: '#fff' },
   bubbleTime: {
-    color: 'rgba(200,200,200,0.48)',
+    color: T.textMuted,
     fontSize: 10,
     marginHorizontal: 4,
     alignSelf: 'flex-start',
   },
   bubbleTimeMe: {
-    color: 'rgba(255,255,255,0.62)',
+    color: 'rgba(255,255,255,0.72)',
     alignSelf: 'flex-end',
   },
   messageHeartBadge: {
@@ -996,20 +1067,20 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#151515',
+    backgroundColor: T.surfaceSoft,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: T.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   messageHeartBadgeText: {
-    color: '#E50914',
+    color: T.red,
     fontSize: 10,
     fontWeight: '800',
     lineHeight: 12,
   },
   typingBubble: { paddingVertical: 12, paddingHorizontal: 16 },
-  typingDots: { color: '#888', fontSize: 12, letterSpacing: 3 },
+  typingDots: { color: T.textMuted, fontSize: 12, letterSpacing: 3 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -1017,31 +1088,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#1a1a1a',
-    backgroundColor: '#0f0f0f',
+    borderTopColor: T.borderSoft,
+    backgroundColor: T.surface,
   },
   input: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
-    color: '#fff',
+    backgroundColor: T.inputBg,
+    color: T.text,
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
     maxHeight: 120,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: T.border,
   },
   sendBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#E50914',
+    backgroundColor: T.red,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
   },
-  sendBtnDisabled: { backgroundColor: '#3a0a0a' },
+  sendBtnDisabled: { backgroundColor: T.redSoft },
   sendBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 
   // Kalp
@@ -1055,11 +1126,11 @@ const styles = StyleSheet.create({
   // Menü
   menuOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
   menuSheet: {
-    backgroundColor: '#161616',
+    backgroundColor: T.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 16,
@@ -1068,7 +1139,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   menuTitle: {
-    color: '#888',
+    color: T.textMuted,
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
@@ -1077,26 +1148,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   menuItem: {
-    backgroundColor: '#1f1f1f',
+    backgroundColor: T.surfaceSoft,
     borderRadius: 14,
     paddingVertical: 15,
     paddingHorizontal: 18,
     borderWidth: 0.5,
-    borderColor: '#2a2a2a',
+    borderColor: T.border,
   },
   menuItemDanger: {
-    borderColor: 'rgba(229,9,20,0.25)',
-    backgroundColor: '#1a0a0b',
+    borderColor: T.redBorder,
+    backgroundColor: T.redSoft,
   },
   menuItemDisabled: {
     opacity: 0.45,
   },
   menuItemCancel: {
     marginTop: 4,
-    backgroundColor: '#111',
+    backgroundColor: T.glass,
   },
-  menuItemText: { color: '#e5e5e5', fontSize: 15, fontWeight: '600' },
-  menuItemTextDanger: { color: '#ff4d4d' },
-  menuItemTextDisabled: { color: '#888', fontSize: 15, fontWeight: '600' },
-  menuItemTextCancel: { color: '#888', fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  menuItemText: { color: T.text, fontSize: 15, fontWeight: '600' },
+  menuItemTextDanger: { color: T.red },
+  menuItemTextDisabled: { color: T.textMuted, fontSize: 15, fontWeight: '600' },
+  menuItemTextCancel: { color: T.textMuted, fontSize: 15, fontWeight: '600', textAlign: 'center' },
 });
+}

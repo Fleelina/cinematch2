@@ -347,9 +347,12 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
   }
 
   // Yeni avatar geliyorsa eski upload dosyasi best-effort olarak silinir.
+  // Eski avatar yeni foto listesinde duruyorsa silinmez; siralama degisince 2./3. foto kirilmasin.
   if (avatar) {
     const current = await prisma.user.findUnique({ where: { id: userId }, select: { avatar: true, avatarType: true } });
-    if (current?.avatar && current.avatar !== avatar && (current.avatarType === 'upload' || current.avatarType === 'photo')) {
+    const nextProfilePhotos = Array.isArray(profilePhotos) ? profilePhotos.slice(0, 3).filter(Boolean) : [];
+    const oldAvatarStillUsed = nextProfilePhotos.includes(current?.avatar);
+    if (current?.avatar && current.avatar !== avatar && !oldAvatarStillUsed && (current.avatarType === 'upload' || current.avatarType === 'photo')) {
       setImmediate(() => deleteFromR2(current.avatar).catch((err) => console.error('[R2] Avatar silinemedi:', current.avatar, err)));
     }
   }

@@ -21,6 +21,10 @@ import { useAppDrawer } from '../context/DrawerContext';
 const { width: SW, height: SH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SW * 0.25;
 const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
+const DUNE_ICON = require('../../assets/dune-icon.png');
+const MATCH_ACTION_ICON_SOURCES = {
+  dune: DUNE_ICON,
+};
 
 const T = {
   bg: '#05060a',
@@ -41,11 +45,91 @@ const getProfilePhotos = (user) => {
   return merged.slice(0, 3).map(normalizeImageUri).filter(Boolean);
 };
 
+const getMatchmakingCardTheme = (themeColors = {}, movieTheme = {}, isDark = true) => {
+  const theme = movieTheme?.matchmakingCard || {};
+  if (!isDark) {
+    const cardBackground = themeColors.bgSoft || '#c8d0dc';
+    return {
+      background: cardBackground,
+      border: themeColors.border || 'rgba(33,45,62,0.14)',
+      infoBackground: cardBackground,
+      photoBackground: cardBackground,
+      placeholderBackground: cardBackground,
+      rowBackground: 'rgba(33,45,62,0.06)',
+      rowGoldBackground: 'rgba(240,180,41,0.14)',
+      rowBorder: themeColors.borderSoft || 'rgba(33,45,62,0.08)',
+      rowGoldBorder: 'rgba(240,180,41,0.26)',
+      shadow: 'rgba(33,45,62,0.24)',
+      shadowOpacity: 0.18,
+      textPrimary: themeColors.textPrimary || '#121214',
+      textSecondary: themeColors.textSecondary || '#495057',
+      textMuted: themeColors.textMuted || '#adb5bd',
+      accent: themeColors.red || '#ff3b55',
+      accentSoft: themeColors.redSoft || 'rgba(255,59,85,0.1)',
+      accentBorder: themeColors.redBorder || 'rgba(255,59,85,0.2)',
+      gold: themeColors.gold || '#f0b429',
+      topBadgeBackground: 'rgba(255,255,255,0.76)',
+      topBadgeBorder: 'rgba(33,45,62,0.12)',
+      likeBackground: 'rgba(255,255,255,0.78)',
+      likeBorder: themeColors.redBorder || 'rgba(255,59,85,0.2)',
+    };
+  }
+
+  return {
+    background: theme.background || themeColors.bgElevated || themeColors.bgSoft || '#11131b',
+    border: theme.border || themeColors.borderStrong || themeColors.border || '#242734',
+    infoBackground: theme.infoBackground || themeColors.surface || themeColors.bgSoft || '#11131b',
+    photoBackground: theme.photoBackground || themeColors.bg || '#08090e',
+    placeholderBackground: theme.placeholderBackground || themeColors.bgElevated || '#171923',
+    rowBackground: theme.rowBackground || themeColors.glassStrong || '#191b26',
+    rowGoldBackground: theme.rowGoldBackground || themeColors.goldSoft || 'rgba(240,180,41,0.12)',
+    rowBorder: theme.rowBorder || themeColors.border || '#242734',
+    rowGoldBorder: theme.rowGoldBorder || themeColors.primaryBorder || 'rgba(240,180,41,0.2)',
+    shadow: theme.shadow || themeColors.shadow || '#000',
+    shadowOpacity: 0.55,
+    textPrimary: themeColors.textPrimary || '#ffffff',
+    textSecondary: themeColors.textSecondary || '#8888aa',
+    textMuted: themeColors.textMuted || '#444466',
+    accent: themeColors.red || '#ff4058',
+    accentSoft: themeColors.redSoft || 'rgba(255,64,88,0.18)',
+    accentBorder: themeColors.redBorder || 'rgba(255,64,88,0.45)',
+    gold: themeColors.gold || '#f0b429',
+    topBadgeBackground: 'rgba(0,0,0,0.58)',
+    topBadgeBorder: 'rgba(255,255,255,0.18)',
+    likeBackground: 'rgba(18,6,8,0.72)',
+    likeBorder: 'rgba(220,60,80,0.25)',
+  };
+};
+
+const getMatchActionTheme = (themeColors = {}, movieTheme = {}, cardTheme = {}) => {
+  const accent = cardTheme.accent || themeColors.red || '#ff4058';
+  const iconSource = MATCH_ACTION_ICON_SOURCES[movieTheme?.id];
+  const iconText = movieTheme?.icons?.like || '♥';
+
+  return {
+    iconSource,
+    iconText,
+    accent,
+    background: iconSource ? 'transparent' : cardTheme.likeBackground || 'rgba(18,6,8,0.72)',
+    borderColor: iconSource ? `${accent}8C` : cardTheme.likeBorder || 'rgba(220,60,80,0.25)',
+    glowColor: iconSource ? accent : cardTheme.accent || accent,
+    glowOpacity: iconSource ? 0.18 : 0.12,
+    idleGlowOpacity: iconSource ? 0.35 : 0.18,
+    pressedGlowOpacity: iconSource ? 1 : 0.65,
+    size: iconSource ? 64 : 48,
+    frameSize: iconSource ? 58 : 48,
+    iconSize: iconSource ? 58 : 18,
+    borderRadius: iconSource ? 19 : 16,
+    pressMarginRight: iconSource ? -6 : 0,
+    pressScale: iconSource ? 0.9 : 0.88,
+  };
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MatchmakingScreen({ navigation }) {
   const { user: currentUser } = useAuth();
-  const { theme: themeColors, movieTheme } = useTheme();
+  const { theme: themeColors, movieTheme, isDark } = useTheme();
   const { openDrawer } = useAppDrawer();
   const [users, setUsers] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -214,7 +298,7 @@ export default function MatchmakingScreen({ navigation }) {
   if (loading) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <GradientShell center themeColors={themeColors} movieTheme={movieTheme}>
+        <GradientShell center themeColors={themeColors} movieTheme={movieTheme} isDark={isDark}>
           <ActivityIndicator color={T.accent} size="large" />
           <Text style={styles.loadingText}>Kişiler yükleniyor...</Text>
         </GradientShell>
@@ -224,11 +308,20 @@ export default function MatchmakingScreen({ navigation }) {
 
   const current = users[currentIndex];
   const next = users[currentIndex + 1];
+  const cardTheme = getMatchmakingCardTheme(themeColors, movieTheme, isDark);
+  const matchActionTheme = getMatchActionTheme(themeColors, movieTheme, cardTheme);
+  const isDuneTheme = movieTheme?.id === 'dune';
+  const cardShellStyle = {
+    backgroundColor: cardTheme.background,
+    borderColor: cardTheme.border,
+    shadowColor: cardTheme.shadow,
+    shadowOpacity: cardTheme.shadowOpacity,
+  };
 
   if (!current) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <GradientShell center themeColors={themeColors} movieTheme={movieTheme}>
+        <GradientShell center themeColors={themeColors} movieTheme={movieTheme} isDark={isDark}>
           <Text style={styles.doneEmoji}>🎬</Text>
           <Text style={styles.doneTitle}>Tur {round} tamamlandı!</Text>
           <Text style={styles.doneSub}>Atlananlar 24 saat sonra tekrar görünecek</Text>
@@ -242,12 +335,15 @@ export default function MatchmakingScreen({ navigation }) {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <GradientShell themeColors={themeColors} movieTheme={movieTheme}>
+      <GradientShell themeColors={themeColors} movieTheme={movieTheme} isDark={isDark}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View style={styles.titleGroup}>
               <Pressable
-                style={styles.drawerButton}
+                style={[
+                  styles.drawerButton,
+                  { backgroundColor: themeColors.glass, borderColor: themeColors.border },
+                ]}
                 onPress={openDrawer}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
@@ -255,11 +351,20 @@ export default function MatchmakingScreen({ navigation }) {
                 <View style={[styles.drawerLine, styles.drawerLineAccent, { width: 14 }]} />
                 <View style={[styles.drawerLine, { width: 20 }]} />
               </Pressable>
-              <Text style={styles.title} numberOfLines={1}>Match</Text>
+              <Text
+                style={[styles.title, !isDark && { color: themeColors.textPrimary }]}
+                numberOfLines={1}
+              >
+                Match
+              </Text>
             </View>
             <Pressable style={styles.matchesPill} onPress={() => navigation.navigate('Matches')}>
-              <View style={styles.matchesPillIcon}>
-                <Text style={styles.matchesPillIconText}>♥</Text>
+              <View style={[styles.matchesPillIcon, isDuneTheme && styles.duneIconSlotClean]}>
+                {isDuneTheme ? (
+                  <Image source={DUNE_ICON} style={styles.dunePillIcon} resizeMode="contain" />
+                ) : (
+                  <Text style={styles.matchesPillIconText}>♥</Text>
+                )}
               </View>
               <Text style={styles.matchesPillText}>Eşleşenler</Text>
               <Text style={styles.matchesPillArrow}>›</Text>
@@ -273,6 +378,7 @@ export default function MatchmakingScreen({ navigation }) {
           <Pressable
             style={[
               styles.undoFloating,
+              !isDark && { backgroundColor: themeColors.glass, borderColor: themeColors.border },
               (!!actionLoading || currentIndex === 0 || !lastSwipedRef.current || lastSwipedRef.current?.matched) && { opacity: 0.2 }
             ]}
             onPress={handleUndo}
@@ -282,8 +388,8 @@ export default function MatchmakingScreen({ navigation }) {
           </Pressable>
           {/* Arka kart */}
           {next ? (
-            <Animated.View style={[styles.card, { transform: [{ scale: backCardScale }], opacity: backCardOpacity }]}>
-              <BackCardContent user={next} />
+            <Animated.View style={[styles.card, cardShellStyle, { transform: [{ scale: backCardScale }], opacity: backCardOpacity }]}>
+              <BackCardContent user={next} cardTheme={cardTheme} />
             </Animated.View>
           ) : null}
 
@@ -298,18 +404,27 @@ export default function MatchmakingScreen({ navigation }) {
               failOffsetY={[-8, 8]}
             >
               <Animated.View
-                style={[styles.card, {
+                style={[styles.card, cardShellStyle, {
                   transform: [{ translateX }, { translateY: Animated.multiply(translateY, 0.15) }, { rotate }],
                 }]}
               >
-                <Animated.View style={[styles.overlayLike, { opacity: likeOpacity }]}>
-                  <View style={styles.badge}><Text style={styles.badgeLikeText}>LIKE ♥</Text></View>
+                <Animated.View pointerEvents="none" style={[styles.overlayLike, { opacity: likeOpacity }]}>
+                  <View style={styles.badge}>
+                    <View style={styles.badgeContent}>
+                      <Text style={styles.badgeLikeText}>LIKE</Text>
+                      {isDuneTheme ? (
+                        <Image source={DUNE_ICON} style={styles.duneBadgeIcon} resizeMode="contain" />
+                      ) : (
+                        <Text style={styles.badgeLikeText}>♥</Text>
+                      )}
+                    </View>
+                  </View>
                 </Animated.View>
-                <Animated.View style={[styles.overlayNope, { opacity: nopeOpacity }]}>
+                <Animated.View pointerEvents="none" style={[styles.overlayNope, { opacity: nopeOpacity }]}>
                   <View style={[styles.badge, styles.badgeNope]}><Text style={styles.badgeNopeText}>NOPE ✕</Text></View>
                 </Animated.View>
 
-                <UserCardContent user={current} listRef={cardListRef} panRef={cardPanRef} onLike={triggerSwipeRight} />
+                <UserCardContent user={current} listRef={cardListRef} panRef={cardPanRef} onLike={triggerSwipeRight} cardTheme={cardTheme} matchActionTheme={matchActionTheme} />
               </Animated.View>
             </PanGestureHandler>
           ) : null}
@@ -331,13 +446,16 @@ export default function MatchmakingScreen({ navigation }) {
 
 // ─── GradientShell ────────────────────────────────────────────────────────────
 
-function GradientShell({ children, center, themeColors, movieTheme }) {
-  const backgroundImage = movieTheme?.matchmakingBackgroundImage || DEFAULT_BACKGROUND;
+function GradientShell({ children, center, themeColors, movieTheme, isDark }) {
+  const backgroundImage = isDark ? (movieTheme?.matchmakingBackgroundImage || DEFAULT_BACKGROUND) : null;
   const themeGradient = movieTheme?.gradient || null;
   const defaultGradient = ['#260408', '#07080d', '#030407'];
+  const lightGradient = ['#d7dce5', '#c8d0dc', '#b8c2d0'];
   const colors = backgroundImage
     ? ['rgba(8,5,2,0.28)', 'rgba(7,8,13,0.72)', 'rgba(3,4,7,0.95)']
-    : themeGradient || defaultGradient;
+    : isDark
+      ? themeGradient || defaultGradient
+      : lightGradient;
   const locations = backgroundImage ? [0, 0.46, 1] : [0, 0.42, 1];
   const content = (
     <>
@@ -352,28 +470,36 @@ function GradientShell({ children, center, themeColors, movieTheme }) {
     </>
   );
 
+  if (backgroundImage) {
+    return (
+      <ImageBackground
+        source={backgroundImage}
+        style={[styles.container, center && styles.center]}
+        resizeMode="cover"
+      >
+        {content}
+      </ImageBackground>
+    );
+  }
+
   return (
-    <ImageBackground
-      source={backgroundImage}
-      style={[styles.container, center && styles.center]}
-      resizeMode="cover"
-    >
+    <View style={[styles.container, center && styles.center]}>
       {content}
-    </ImageBackground>
+    </View>
   );
 }
 
 // ─── BackCardContent ──────────────────────────────────────────────────────────
 
-function BackCardContent({ user }) {
+function BackCardContent({ user, cardTheme }) {
   const photos = getProfilePhotos(user);
   const mainPhoto = photos[0];
   return (
-    <View style={{ flex: 1, backgroundColor: '#11131b' }}>
+    <View style={{ flex: 1, backgroundColor: cardTheme.background }}>
       {mainPhoto
         ? <Image source={{ uri: mainPhoto }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        : <View style={[StyleSheet.absoluteFill, { backgroundColor: '#171923', justifyContent: 'center', alignItems: 'center' }]}>
-            <Text style={{ color: '#fff', fontSize: 72, fontWeight: '900' }}>{user.name?.[0]?.toUpperCase()}</Text>
+        : <View style={[StyleSheet.absoluteFill, { backgroundColor: cardTheme.placeholderBackground, justifyContent: 'center', alignItems: 'center' }]}>
+            <Text style={{ color: cardTheme.textPrimary, fontSize: 72, fontWeight: '900' }}>{user.name?.[0]?.toUpperCase()}</Text>
           </View>
       }
       <LinearGradient colors={['transparent', 'rgba(5,6,10,0.85)']} locations={[0.55, 1]} style={StyleSheet.absoluteFill} />
@@ -394,9 +520,9 @@ function BackCardContent({ user }) {
 //   [4] Foto 3   — boşluk (ileride 3. profil fotoğrafı)
 //   [5] Info 3   — Hakkında
 
-function ProfilePhotoSlide({ uri }) {
+function ProfilePhotoSlide({ uri, cardTheme }) {
   return (
-    <View style={styles.slidePhoto}>
+    <View style={[styles.slidePhoto, { backgroundColor: cardTheme.photoBackground }]}>
       <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       <LinearGradient
         colors={['rgba(5,6,10,0.08)', 'transparent', 'rgba(5,6,10,0.2)']}
@@ -407,16 +533,123 @@ function ProfilePhotoSlide({ uri }) {
   );
 }
 
-function EmptyPhotoSlide({ icon }) {
+function EmptyPhotoSlide({ icon, cardTheme }) {
   return (
-    <View style={[styles.slidePhoto, styles.slidePlaceholder]}>
+    <View style={[styles.slidePhoto, styles.slidePlaceholder, { backgroundColor: cardTheme.placeholderBackground, borderTopColor: cardTheme.border }]}>
       <Text style={styles.placeholderIcon}>{icon}</Text>
-      <Text style={styles.placeholderText}>Daha fazla fotoğraf eklenmemiş</Text>
+      <Text style={[styles.placeholderText, { color: cardTheme.textMuted }]}>Daha fazla fotoğraf eklenmemiş</Text>
     </View>
   );
 }
 
-function UserCardContent({ user, listRef, panRef, onLike }) {
+function MatchActionButton({ onPress, theme }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const glowOpacity = useRef(new Animated.Value(theme.idleGlowOpacity)).current;
+
+  useEffect(() => {
+    scale.setValue(1);
+    glowOpacity.setValue(theme.idleGlowOpacity);
+  }, [glowOpacity, scale, theme.idleGlowOpacity, theme.iconSource, theme.iconText]);
+
+  const handlePressIn = useCallback(() => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: theme.pressScale,
+        useNativeDriver: true,
+        speed: 34,
+        bounciness: 8,
+      }),
+      Animated.timing(glowOpacity, {
+        toValue: theme.pressedGlowOpacity,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [glowOpacity, scale, theme.pressScale, theme.pressedGlowOpacity]);
+
+  const handlePressOut = useCallback(() => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 28,
+        bounciness: 10,
+      }),
+      Animated.timing(glowOpacity, {
+        toValue: theme.idleGlowOpacity,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [glowOpacity, scale, theme.idleGlowOpacity]);
+
+  const handlePress = useCallback(() => {
+    onPress?.();
+  }, [onPress]);
+
+  return (
+    <Pressable
+      style={[
+        styles.matchActionPressable,
+        {
+          width: theme.size,
+          height: theme.size,
+          marginRight: theme.pressMarginRight,
+        },
+      ]}
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      hitSlop={16}
+      pressRetentionOffset={20}
+    >
+      <Animated.View style={[
+        styles.matchActionSlot,
+        {
+          width: theme.frameSize,
+          height: theme.frameSize,
+          borderRadius: theme.borderRadius,
+          borderColor: theme.borderColor,
+          backgroundColor: theme.background,
+          transform: [{ scale }],
+        },
+      ]}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.matchActionGlow,
+            {
+              width: theme.size,
+              height: theme.size,
+              borderRadius: Math.round(theme.size * 0.34),
+              backgroundColor: theme.glowColor,
+              opacity: glowOpacity,
+            },
+          ]}
+        />
+        {theme.iconSource ? (
+          <Image
+            source={theme.iconSource}
+            style={[
+              styles.matchActionImage,
+              {
+                width: theme.iconSize,
+                height: theme.iconSize,
+              },
+            ]}
+            resizeMode="contain"
+          />
+        ) : (
+          <Text style={[styles.matchActionText, { color: theme.accent, fontSize: theme.iconSize }]}>
+            {theme.iconText}
+          </Text>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function UserCardContent({ user, listRef, panRef, onLike, cardTheme, matchActionTheme }) {
   const recentMovies = user.movies?.slice(0, 3) ?? [];
   const hasCommonMovies = user.commonMovies > 0 && user.movies?.length > 0;
   const photos = getProfilePhotos(user);
@@ -435,11 +668,11 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
 
       case 'photo1':
         return (
-          <View style={styles.slidePhoto}>
+          <View style={[styles.slidePhoto, { backgroundColor: cardTheme.photoBackground }]}>
             {photos[0]
               ? <Image source={{ uri: photos[0] }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-              : <View style={[StyleSheet.absoluteFill, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitialLarge}>{user.name?.[0]?.toUpperCase()}</Text>
+              : <View style={[StyleSheet.absoluteFill, styles.avatarFallback, { backgroundColor: cardTheme.placeholderBackground }]}>
+                  <Text style={[styles.avatarInitialLarge, { color: cardTheme.textPrimary }]}>{user.name?.[0]?.toUpperCase()}</Text>
                 </View>
             }
             <LinearGradient
@@ -447,9 +680,12 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
               locations={[0.38, 1]}
               style={StyleSheet.absoluteFill}
             />
-            <View style={styles.topBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.topBadgeText}>CINE MATCH</Text>
+            <View style={[
+              styles.topBadge,
+              { backgroundColor: cardTheme.topBadgeBackground, borderColor: cardTheme.topBadgeBorder },
+            ]}>
+              <View style={[styles.liveDot, { backgroundColor: cardTheme.accent, shadowColor: cardTheme.accent }]} />
+              <Text style={[styles.topBadgeText, { color: cardTheme.accent }]}>CINE MATCH</Text>
             </View>
             <View style={styles.photo1Identity}>
               <Text style={styles.heroName} numberOfLines={1}>
@@ -460,25 +696,23 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
               <View style={styles.photo1Separator} />
               <View style={styles.scoreRowWithLike}>
                 <View style={styles.scoreRow}>
-                  <View style={styles.matchScorePill}>
-                    <Text style={styles.matchScoreValue}>%{user.matchScore}</Text>
-                    <Text style={styles.matchScoreLabel}> uyum</Text>
+                  <View style={[
+                    styles.matchScorePill,
+                    { backgroundColor: cardTheme.accentSoft, borderColor: cardTheme.accentBorder },
+                  ]}>
+                    <Text style={[styles.matchScoreValue, { color: cardTheme.accent }]}>%{user.matchScore}</Text>
+                    <Text style={[styles.matchScoreLabel, { color: cardTheme.accent }]}> uyum</Text>
                   </View>
                   {user.commonMovies > 0 ? (
-                    <View style={styles.commonMoviePill}>
-                      <Text style={styles.commonMovieValue}>{user.commonMovies} ortak film</Text>
+                    <View style={[
+                      styles.commonMoviePill,
+                      { backgroundColor: cardTheme.rowGoldBackground, borderColor: cardTheme.rowGoldBorder },
+                    ]}>
+                      <Text style={[styles.commonMovieValue, { color: cardTheme.gold }]}>{user.commonMovies} ortak film</Text>
                     </View>
                   ) : null}
                 </View>
-                <Pressable
-                  style={styles.likeInPhoto}
-                  onPress={onLike}
-                  hitSlop={12}
-                >
-                  <View style={styles.likeInPhotoGradient}>
-                    <Text style={styles.likeInPhotoIcon}>♥</Text>
-                  </View>
-                </Pressable>
+                <MatchActionButton onPress={onLike} theme={matchActionTheme} />
               </View>
             </View>
           </View>
@@ -486,48 +720,50 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
 
       case 'info1':
         return (
-          <View style={styles.slideInfo}>
-            <Text style={styles.slideLabel}>SON EKLENEN FİLMLER</Text>
+          <View style={[styles.slideInfo, { backgroundColor: cardTheme.infoBackground, borderTopColor: cardTheme.border }]}>
+            <Text style={[styles.slideLabel, { color: cardTheme.accent }]}>SON EKLENEN FİLMLER</Text>
             {recentMovies.length > 0
               ? recentMovies.map((movie, i) => (
-                  <View key={`r-${movie.movieId}-${i}`} style={styles.movieRow}>
+                  <View key={`r-${movie.movieId}-${i}`} style={[styles.movieRow, { backgroundColor: cardTheme.rowBackground, borderColor: cardTheme.rowBorder }]}>
                     <View style={styles.movieDot} />
-                    <Text style={styles.movieRowText} numberOfLines={1}>{movie.movie?.title}</Text>
+                    <Text style={[styles.movieRowText, { color: cardTheme.textSecondary }]} numberOfLines={1}>{movie.movie?.title}</Text>
                   </View>
                 ))
-              : <Text style={styles.slideMuted}>Henüz film eklenmemiş.</Text>
+              : <Text style={[styles.slideMuted, { color: cardTheme.textMuted }]}>Henüz film eklenmemiş.</Text>
             }
           </View>
         );
 
       case 'photo2':
-        return photos[1] ? <ProfilePhotoSlide uri={photos[1]} /> : <EmptyPhotoSlide icon="📷" />;
+        return photos[1] ? <ProfilePhotoSlide uri={photos[1]} cardTheme={cardTheme} /> : <EmptyPhotoSlide icon="📷" cardTheme={cardTheme} />;
 
       case 'info2':
         return (
-          <View style={styles.slideInfo}>
-            <Text style={styles.slideLabel}>ORTAK FİLMLERİMİZ</Text>
+          <View style={[styles.slideInfo, { backgroundColor: cardTheme.infoBackground, borderTopColor: cardTheme.border }]}>
+            <Text style={[styles.slideLabel, { color: cardTheme.accent }]}>ORTAK FİLMLERİMİZ</Text>
             {hasCommonMovies
               ? user.movies.slice(0, 4).map((movie, i) => (
-                  <View key={`c-${movie.movieId}-${i}`} style={[styles.movieRow, styles.movieRowGold]}>
+                  <View key={`c-${movie.movieId}-${i}`} style={[styles.movieRow, styles.movieRowGold, { backgroundColor: cardTheme.rowGoldBackground, borderColor: cardTheme.rowGoldBorder }]}>
                     <View style={[styles.movieDot, styles.movieDotGold]} />
-                    <Text style={styles.movieRowText} numberOfLines={1}>{movie.movie?.title}</Text>
+                    <Text style={[styles.movieRowText, { color: cardTheme.textSecondary }]} numberOfLines={1}>{movie.movie?.title}</Text>
                   </View>
                 ))
-              : <Text style={styles.slideMuted}>Ortak film yakalandığında burada görünür.</Text>
+              : <Text style={[styles.slideMuted, { color: cardTheme.textMuted }]}>Ortak film yakalandığında burada görünür.</Text>
             }
           </View>
         );
 
       case 'photo3':
-        return photos[2] ? <ProfilePhotoSlide uri={photos[2]} /> : <EmptyPhotoSlide icon="🎬" />;
+        return photos[2] ? <ProfilePhotoSlide uri={photos[2]} cardTheme={cardTheme} /> : <EmptyPhotoSlide icon="🎬" cardTheme={cardTheme} />;
 
       case 'info3':
+        const aboutText = user.bio || 'Bu kullanıcı henüz kendini tanıtmamış.';
+        const aboutMinHeight = Math.min(SH * 0.48, Math.max(SH * 0.24, 94 + Math.ceil(aboutText.length / 34) * 24));
         return (
-          <View style={[styles.slideInfo, { borderBottomWidth: 0 }]}>
-            <Text style={styles.slideLabel}>HAKKINDA</Text>
-            <Text style={styles.bioText}>
-              {user.bio || 'Bu kullanıcı henüz kendini tanıtmamış.'}
+          <View style={[styles.slideInfo, styles.slideInfoLast, { minHeight: aboutMinHeight, backgroundColor: cardTheme.infoBackground, borderTopColor: cardTheme.border }]}>
+            <Text style={[styles.slideLabel, { color: cardTheme.accent }]}>HAKKINDA</Text>
+            <Text style={[styles.bioText, { color: cardTheme.textSecondary }]}>
+              {aboutText}
             </Text>
           </View>
         );
@@ -535,7 +771,7 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
       default:
         return null;
     }
-  }, [user, recentMovies, hasCommonMovies, photos]);
+  }, [user, recentMovies, hasCommonMovies, photos, cardTheme, matchActionTheme, onLike]);
 
   return (
     <NativeViewGestureHandler
@@ -547,7 +783,7 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
         data={slides}
         keyExtractor={(item) => item.key}
         renderItem={renderSlide}
-      decelerationRate="normal"
+        decelerationRate="normal"
         showsVerticalScrollIndicator={false}
         bounces={false}
         nestedScrollEnabled
@@ -679,6 +915,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  dunePillIcon: {
+    width: 36,
+    height: 36,
+  },
+  duneIconSlotClean: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    overflow: 'visible',
+  },
   matchesPillIconText: { color: T.accent, fontSize: 12, fontWeight: '900', marginTop: -1 },
   matchesPillText: { color: T.textPrimary, fontFamily: 'Inter_800ExtraBold', fontSize: 12, letterSpacing: -0.1 },
   matchesPillArrow: { color: T.accentSecondary, fontSize: 16, marginTop: -1 },
@@ -686,7 +931,7 @@ const styles = StyleSheet.create({
 
   cardArea: {
     flex: 1, alignItems: 'center', justifyContent: 'flex-start',
-    marginHorizontal: 8, marginTop: 6, marginBottom: 0,
+    marginHorizontal: 8, marginTop: 6, marginBottom: 96,
   },
   card: {
     position: 'absolute', top: 0, bottom: 0,
@@ -696,7 +941,6 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.55, shadowRadius: 24, elevation: 16,
   },
-
   // ── Slide: photo ──
   slidePhoto: {
     height: SH * 0.72,
@@ -781,6 +1025,10 @@ const styles = StyleSheet.create({
   movieDotGold: { backgroundColor: T.gold },
   movieRowText: { flex: 1, color: T.textSecondary, fontSize: 14, fontWeight: '600' },
   bioText: { color: T.textSecondary, fontSize: 15, lineHeight: 24 },
+  slideInfoLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 72,
+  },
 
   // ── Swipe overlays ──
   overlayLike: {
@@ -797,35 +1045,44 @@ const styles = StyleSheet.create({
     paddingVertical: 8, paddingHorizontal: 18, borderRadius: Radii.pill, borderWidth: 2,
     borderColor: T.green, backgroundColor: T.greenDim, transform: [{ rotate: '-12deg' }],
   },
+  badgeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   badgeNope: { borderColor: T.red, backgroundColor: 'rgba(255,40,64,0.12)', transform: [{ rotate: '12deg' }] },
   badgeLikeText: { color: T.green, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
+  duneBadgeIcon: {
+    width: 36,
+    height: 36,
+  },
   badgeNopeText: { color: T.red, fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
 
-  // ── Like in photo ──
-  likeInPhoto: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    shadowColor: '#6b0f1a',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.55,
-    shadowRadius: 20,
-    elevation: 12,
+  // ── Match action in photo ──
+  matchActionPressable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
     flexShrink: 0,
   },
-  likeInPhotoGradient: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    justifyContent: 'center',
+  matchActionSlot: {
     alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: 'rgba(220,60,80,0.25)',
-    backgroundColor: 'rgba(18,6,8,0.72)',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
-  likeInPhotoIcon: {
-    fontSize: 18,
-    color: '#c8374a',
+  matchActionGlow: {
+    position: 'absolute',
+  },
+  matchActionText: {
+    fontWeight: '900',
+    marginTop: -1,
+  },
+  matchActionImage: {
+    backgroundColor: 'transparent',
   },
 
   // ── Done screen ──

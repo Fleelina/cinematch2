@@ -2,12 +2,12 @@ import React, { useCallback, useState, useRef, useMemo, useLayoutEffect } from '
 import {
   View, Text, FlatList, TouchableOpacity, Image,
   StyleSheet, ActivityIndicator, Alert, Animated, Pressable,
-  ImageBackground, Platform,
+  ImageBackground,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
-import { Colors, Radii, Shadows } from '../theme';
+import { Radii } from '../theme';
 import MatchModal from '../components/MatchModal';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -207,7 +207,7 @@ function ILikedRow({ item, onProfilePress, T }) {
 
 export default function LikesScreen({ navigation, route }) {
   const { user: currentUser } = useAuth();
-  const { theme: themeColors, movieTheme } = useTheme();
+  const { theme: themeColors, movieTheme, isDark } = useTheme();
 
   const T = useMemo(() => ({
     bg: themeColors.bg,
@@ -227,7 +227,13 @@ export default function LikesScreen({ navigation, route }) {
     textSoft: themeColors.textSecondary,
     textMuted: themeColors.textMuted,
     success: themeColors.success,
-  }), [themeColors]);
+    card: isDark ? themeColors.glass : 'rgba(255,255,255,0.34)',
+    cardActive: themeColors.redSoft,
+    countBg: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(33,45,62,0.08)',
+    heartBadgeBg: isDark ? 'rgba(5,5,6,0.8)' : 'rgba(255,255,255,0.82)',
+    shadow: isDark ? '#000' : 'rgba(33,45,62,0.28)',
+    shadowOpacity: isDark ? 0 : 0.12,
+  }), [themeColors, isDark]);
 
   styles = useMemo(() => createStyles(T), [T]);
 
@@ -235,12 +241,14 @@ export default function LikesScreen({ navigation, route }) {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  const backgroundImage = movieTheme?.backgroundImage || DEFAULT_BACKGROUND;
+  const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
   const overlayColors = movieTheme?.backgroundImage
     ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
     : (movieTheme?.gradient
         ? [movieTheme.gradient[0] + 'ee', movieTheme.gradient[1] + 'cc', movieTheme.gradient[2] || T.bg]
-        : ['rgba(5,5,6,0.10)', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.88)']);
+        : isDark
+          ? ['rgba(5,5,6,0.10)', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.88)']
+          : ['#d7dce5', '#c8d0dc', '#b8c2d0']);
 
   const [activeTab, setActiveTab] = useState('likedMe');
   const [matchModalVisible, setMatchModalVisible] = useState(false);
@@ -308,17 +316,22 @@ export default function LikesScreen({ navigation, route }) {
   const data = activeTab === 'likedMe' ? likedMe : iLiked;
 
   if (loading) {
-    return (
+    const loadingContent = (
+      <LinearGradient colors={overlayColors} style={styles.center}>
+        <ActivityIndicator color={T.red} size="large" />
+      </LinearGradient>
+    );
+
+    return backgroundImage ? (
       <ImageBackground source={backgroundImage} style={{ flex: 1 }} resizeMode="cover">
-        <LinearGradient colors={overlayColors} style={styles.center}>
-          <ActivityIndicator color={T.red} size="large" />
-        </LinearGradient>
+        {loadingContent}
       </ImageBackground>
+    ) : (
+      <View style={{ flex: 1 }}>{loadingContent}</View>
     );
   }
 
-  return (
-    <ImageBackground source={backgroundImage} style={{ flex: 1 }} resizeMode="cover">
+  const content = (
     <LinearGradient colors={overlayColors} style={styles.container}>
 
       {/* ── Hero Header ── */}
@@ -389,7 +402,14 @@ export default function LikesScreen({ navigation, route }) {
         />
       )}
     </LinearGradient>
+  );
+
+  return backgroundImage ? (
+    <ImageBackground source={backgroundImage} style={{ flex: 1 }} resizeMode="cover">
+      {content}
     </ImageBackground>
+  ) : (
+    <View style={{ flex: 1 }}>{content}</View>
   );
 }
 
@@ -400,6 +420,10 @@ function createStyles(T) {
     flex: 1,
     justifyContent: 'center', alignItems: 'center', padding: 32,
   },
+  hero: { paddingHorizontal: 20, paddingTop: 58, paddingBottom: 8 },
+  heroTitle: { color: T.text, fontSize: 32, lineHeight: 38, fontWeight: '900' },
+  heroSubtitle: { color: T.textMuted, fontSize: 14, fontWeight: '600', marginTop: 2 },
+  heroAccent: { color: T.red, fontWeight: '800' },
 
   segmentWrap: {
     flexDirection: 'row', gap: 10,
@@ -416,7 +440,7 @@ function createStyles(T) {
   segmentCount: {
     alignSelf: 'flex-start', marginTop: 8,
     paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: Radii.max, backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: Radii.max, backgroundColor: T.countBg,
   },
   segmentCountActive: { backgroundColor: T.red },
   segmentCountText: { fontSize: 11, fontWeight: '800', color: T.textMuted },
@@ -431,9 +455,14 @@ function createStyles(T) {
 
   card: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: T.glass, borderRadius: Radii.lg,
+    backgroundColor: T.card, borderRadius: Radii.lg,
     borderWidth: 0.5, borderColor: T.border,
     padding: 12, marginBottom: 10,
+    shadowColor: T.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: T.shadowOpacity,
+    shadowRadius: 14,
+    elevation: T.shadowOpacity > 0 ? 3 : 0,
   },
   cardMatched: { borderColor: T.redBorder, backgroundColor: T.redSoft },
   cardPassed: { opacity: 0.4 },
@@ -444,7 +473,9 @@ function createStyles(T) {
   heartBadge: {
     position: 'absolute', bottom: -2, right: -2,
     width: 20, height: 20, borderRadius: 10,
-    backgroundColor: 'rgba(5,5,6,0.8)',
+    backgroundColor: T.heartBadgeBg,
+    borderWidth: 0.5,
+    borderColor: T.border,
     justifyContent: 'center', alignItems: 'center',
   },
   heartBadgeText: { fontSize: 11 },

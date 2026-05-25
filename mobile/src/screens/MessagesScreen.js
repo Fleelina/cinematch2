@@ -1,12 +1,32 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, Image,
-  StyleSheet, ActivityIndicator, Alert,
+  StyleSheet, ActivityIndicator, Alert, ImageBackground,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Colors, Radii } from '../theme';
+import { Radii } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+
+const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
+
+const DEFAULT_T = {
+  bg: '#050506',
+  bgSoft: '#0B0B10',
+  glass: 'rgba(255,255,255,0.06)',
+  glassStrong: 'rgba(255,255,255,0.10)',
+  border: 'rgba(255,255,255,0.10)',
+  borderSoft: 'rgba(255,255,255,0.06)',
+  red: '#ff3b55',
+  redSoft: 'rgba(255,59,85,0.15)',
+  text: '#ffffff',
+  textSoft: '#b9b8c7',
+  textMuted: '#737286',
+};
+
+let styles = createStyles(DEFAULT_T);
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -17,14 +37,14 @@ function timeAgo(dateStr) {
   return `${Math.floor(diff / 86400)}g`;
 }
 
-function Avatar({ user, size = 48 }) {
+function Avatar({ user, size = 48, T = DEFAULT_T }) {
   const AVATAR_COLORS = ['#c8102e', '#1d6a8a', '#2a6a3a', '#6a2a7a', '#6a4a1a'];
   const idx = user?.name?.charCodeAt(0) % AVATAR_COLORS.length ?? 0;
   if (user?.avatar) {
     return (
       <Image
         source={{ uri: user.avatar }}
-        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: Colors.bgCard }}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: T.bgSoft }}
       />
     );
   }
@@ -43,8 +63,29 @@ function Avatar({ user, size = 48 }) {
 
 export default function MessagesScreen({ navigation }) {
   const { user } = useAuth();
+  const { theme: themeColors, movieTheme, isDark } = useTheme();
+  const T = React.useMemo(() => ({
+    bg: themeColors.bg,
+    bgSoft: themeColors.bgSoft,
+    glass: themeColors.glass,
+    glassStrong: themeColors.glassStrong || themeColors.glass,
+    border: themeColors.border,
+    borderSoft: themeColors.borderSoft,
+    red: themeColors.red,
+    redSoft: themeColors.redSoft,
+    text: themeColors.textPrimary,
+    textSoft: themeColors.textSecondary,
+    textMuted: themeColors.textMuted,
+  }), [themeColors]);
+  styles = React.useMemo(() => createStyles(T), [T]);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
+  const gradientColors = movieTheme?.backgroundImage
+    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
+    : (movieTheme?.gradient || (isDark
+        ? ['#050506', '#0B0B10', '#050506']
+        : ['#d7dce5', '#c8d0dc', '#b8c2d0']));
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -61,25 +102,30 @@ export default function MessagesScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={Colors.red} size="large" />
-      </View>
+      <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
+        <View style={styles.center}>
+          <ActivityIndicator color={T.red} size="large" />
+        </View>
+      </ThemeShell>
     );
   }
 
   if (conversations.length === 0) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyEmoji}>💬</Text>
-        <Text style={styles.emptyTitle}>Henüz mesajın yok</Text>
-        <Text style={styles.emptySub}>
-          Eşleştiğin kişilerle buradan konuşabilirsin.
-        </Text>
-      </View>
+      <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
+        <View style={styles.center}>
+          <Text style={styles.emptyEmoji}>💬</Text>
+          <Text style={styles.emptyTitle}>Henüz mesajın yok</Text>
+          <Text style={styles.emptySub}>
+            Eşleştiğin kişilerle buradan konuşabilirsin.
+          </Text>
+        </View>
+      </ThemeShell>
     );
   }
 
   return (
+    <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
@@ -105,15 +151,27 @@ export default function MessagesScreen({ navigation }) {
             onPress={() =>
               navigation.navigate('Chat', { matchId: item.matchId, otherUser: item.user })
             }
+            T={T}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
     </View>
+    </ThemeShell>
   );
 }
 
-function ConversationRow({ item, currentUserId, onAvatarPress, onPress }) {
+function ThemeShell({ children, backgroundImage, gradientColors }) {
+  const content = <LinearGradient colors={gradientColors} style={styles.shell}>{children}</LinearGradient>;
+  if (!backgroundImage) return <View style={styles.shell}>{content}</View>;
+  return (
+    <ImageBackground source={backgroundImage} style={styles.shell} resizeMode="cover">
+      {content}
+    </ImageBackground>
+  );
+}
+
+function ConversationRow({ item, currentUserId, onAvatarPress, onPress, T }) {
   const hasUnread = item.unreadCount > 0;
   const lastMsg = item.lastMessage;
   const previewText = lastMsg
@@ -125,7 +183,7 @@ function ConversationRow({ item, currentUserId, onAvatarPress, onPress }) {
       {/* Avatar */}
       <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.9}>
         <View style={{ position: 'relative' }}>
-          <Avatar user={item.user} size={52} />
+          <Avatar user={item.user} size={52} T={T} />
           {hasUnread && <View style={styles.unreadDot} />}
         </View>
       </TouchableOpacity>
@@ -158,52 +216,56 @@ function ConversationRow({ item, currentUserId, onAvatarPress, onPress }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
+function createStyles(T) {
+  return StyleSheet.create({
+  shell: { flex: 1 },
+  container: { flex: 1 },
   center: {
-    flex: 1, backgroundColor: Colors.bg,
+    flex: 1,
     justifyContent: 'center', alignItems: 'center', padding: 32,
   },
 
   // Header
   header: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16 },
-  headerTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: Colors.textPrimary },
-  headerSub: { fontSize: 12, color: Colors.textMuted, marginTop: 4 },
+  headerTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5, color: T.text },
+  headerSub: { fontSize: 12, color: T.textMuted, marginTop: 4 },
 
   // Satır
   row: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 13, gap: 14,
+    backgroundColor: 'transparent',
   },
   rowContent: { flex: 1 },
   rowTop: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 4,
   },
-  rowName: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  rowName: { fontSize: 15, fontWeight: '600', color: T.text },
   rowNameUnread: { fontWeight: '800' },
-  rowTime: { fontSize: 11, color: Colors.textMuted },
+  rowTime: { fontSize: 11, color: T.textMuted },
   rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowPreview: { fontSize: 13, color: Colors.textSecondary, flex: 1 },
-  rowPreviewUnread: { color: Colors.textPrimary, fontWeight: '600' },
+  rowPreview: { fontSize: 13, color: T.textSoft, flex: 1 },
+  rowPreviewUnread: { color: T.text, fontWeight: '600' },
 
   // Okunmamış göstergeler
   unreadDot: {
     position: 'absolute', bottom: 1, right: 1,
     width: 12, height: 12, borderRadius: 6,
-    backgroundColor: Colors.red, borderWidth: 2, borderColor: Colors.bg,
+    backgroundColor: T.red, borderWidth: 2, borderColor: T.bg,
   },
   unreadBadge: {
-    backgroundColor: Colors.red, borderRadius: Radii.pill,
+    backgroundColor: T.red, borderRadius: Radii.pill,
     minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center',
     paddingHorizontal: 6, marginLeft: 8,
   },
   unreadBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  separator: { height: 0.5, backgroundColor: Colors.borderDim, marginLeft: 82 },
+  separator: { height: 0.5, backgroundColor: T.borderSoft, marginLeft: 82 },
 
   // Boş durum
   emptyEmoji: { fontSize: 52, marginBottom: 14 },
-  emptyTitle: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', marginBottom: 8 },
-  emptySub: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+  emptyTitle: { color: T.text, fontSize: 19, fontWeight: '800', marginBottom: 8 },
+  emptySub: { color: T.textSoft, fontSize: 13, textAlign: 'center', lineHeight: 19 },
 });
+}

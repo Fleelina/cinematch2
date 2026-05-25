@@ -10,11 +10,18 @@ import { movieThemeList } from '../themes/movieThemes';
 import { Radii } from '../theme';
 
 export default function ThemePicker({ visible, onClose }) {
-  const { theme, setMovieTheme, activeMovieThemeId } = useTheme();
+  const { theme, isDark, setThemeMode, setMovieTheme, activeMovieThemeId } = useTheme();
   const s = createStyles(theme);
 
   const handleSelect = async (id) => {
     await setMovieTheme(id === activeMovieThemeId ? null : id);
+    onClose();
+  };
+
+  const handleDefaultModeSelect = async (mode) => {
+    if (activeMovieThemeId && mode === 'light') return;
+    if (activeMovieThemeId) await setMovieTheme(null);
+    await setThemeMode(mode);
     onClose();
   };
 
@@ -35,16 +42,26 @@ export default function ThemePicker({ visible, onClose }) {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-          {/* Default Tema */}
+          {/* Default Temalar */}
           <ThemeCard
-            id={null}
             emoji="🎬"
-            name="Default"
-            description="Cinematch klasik teması"
+            name="Default Koyu"
+            description="Cinematch klasik koyu tema"
             gradient={['#050506', '#0B0B10']}
-            active={activeMovieThemeId === null}
-            onPress={() => handleSelect(null)}
+            active={activeMovieThemeId === null && isDark}
+            onPress={() => handleDefaultModeSelect('dark')}
             theme={theme}
+          />
+          <ThemeCard
+            emoji="☀"
+            name="Default Aydınlık"
+            description={activeMovieThemeId ? 'Aydınlık mod sadece Default temada' : 'Cinematch klasik aydınlık tema'}
+            gradient={['#ffffff', '#f8f9fa', '#e9ecef']}
+            active={activeMovieThemeId === null && !isDark}
+            disabled={activeMovieThemeId !== null}
+            onPress={() => handleDefaultModeSelect('light')}
+            theme={theme}
+            accentColor="#8a46ff"
           />
 
           {/* Divider */}
@@ -75,17 +92,19 @@ export default function ThemePicker({ visible, onClose }) {
   );
 }
 
-function ThemeCard({ emoji, name, description, gradient, active, onPress, theme, accentColor }) {
+function ThemeCard({ emoji, name, description, gradient, active, disabled, onPress, theme, accentColor }) {
   const accent = accentColor || theme.purple;
   return (
     <TouchableOpacity
       onPress={onPress}
+      disabled={disabled}
       style={[
         cardStyles.card,
         {
           backgroundColor: theme.glass,
           borderColor: active ? accent : theme.border,
           borderWidth: active ? 1.5 : 1,
+          opacity: disabled ? 0.42 : 1,
         },
       ]}
       activeOpacity={0.7}
