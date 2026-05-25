@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { ApiError } = require('../middleware/errorHandler');
 
 // Cloudflare R2, S3 uyumlu client ile kullanilir.
@@ -13,10 +13,16 @@ const r2 = new S3Client({
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
+const getPublicBaseUrl = () => {
+  const value = (process.env.R2_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+  if (!value) return '';
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+};
+
 // Base64 gorseli boyut kontrolunden gecirip R2'ye yukler.
 // Dosya anahtari folder + identifier + timestamp ile uretildigi icin cakisma riski dusuktur.
 const uploadToR2 = async (base64, mimeType, folder, identifier) => {
-  const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
+  const base64Data = base64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
   const buffer = Buffer.from(base64Data, 'base64');
 
   if (buffer.length > MAX_SIZE_BYTES) {
@@ -34,14 +40,15 @@ const uploadToR2 = async (base64, mimeType, folder, identifier) => {
     CacheControl: 'public, max-age=31536000',
   }));
 
-  return `${process.env.R2_PUBLIC_URL}/${key}`;
+  return `${getPublicBaseUrl()}/${key}`;
 };
 
 // Public URL'den bucket icindeki object key'i cikarir.
 const extractKeyFromUrl = (url) => {
   if (!url) return null;
   try {
-    const { pathname } = new URL(url);
+    const normalizedUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    const { pathname } = new URL(normalizedUrl);
     return pathname.startsWith('/') ? pathname.slice(1) : pathname;
   } catch {
     return null;
@@ -51,7 +58,9 @@ const extractKeyFromUrl = (url) => {
 // Silme islemi best-effort calisir; hata uygulama akisina yansitilmaz.
 const deleteFromR2 = async (keyOrUrl) => {
   if (!keyOrUrl) return;
-  const key = keyOrUrl.startsWith('http') ? extractKeyFromUrl(keyOrUrl) : keyOrUrl;
+  const key = /^https?:\/\//i.test(keyOrUrl) || keyOrUrl.includes('/avatars/')
+    ? extractKeyFromUrl(keyOrUrl)
+    : keyOrUrl;
   if (!key) return;
   try {
     await r2.send(new DeleteObjectCommand({
@@ -60,6 +69,21 @@ const deleteFromR2 = async (keyOrUrl) => {
     }));
   } catch (err) {
     console.error('[R2] Silme hatasi:', err.message);
+  }
+};
+
+const getFromR2 = async (key) => {
+  if (!key || key.includes('..') || key.startsWith('/')) {
+    throw new ApiError(400, 'Gecersiz gorsel yolu');
+  }
+
+  try {
+    return await r2.send(new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+    }));
+  } catch {
+    throw new ApiError(404, 'Gorsel bulunamadi');
   }
 };
 
@@ -84,11 +108,11 @@ const finalizeAvatar = async (tempUrl, userId) => {
 
     setImmediate(() => deleteFromR2(tempKey));
 
-    return `${process.env.R2_PUBLIC_URL}/${finalKey}`;
+    return `${getPublicBaseUrl()}/${finalKey}`;
   } catch (err) {
     console.error('[R2] Finalize hatasi:', err.message);
     return tempUrl; // Finalize basarisizsa mevcut temp URL ile devam edilir.
   }
 };
 
-module.exports = { uploadToR2, deleteFromR2, finalizeAvatar };
+module.exports = { uploadToR2, deleteFromR2, finalizeAvatar, getFromR2 };

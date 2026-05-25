@@ -63,6 +63,7 @@ const createUserWithMovies = async ({ name, email, password, username, bio, avat
       bio: bio || null,
       avatar: avatar || null,
       avatarType: avatarType || null,
+      profilePhotos: avatar ? [avatar] : [],
       age: age ? parseInt(age) : null,
       showAge: showAge ?? false,
       gender: gender || null,
@@ -80,6 +81,7 @@ const formatUserResponse = (user) => ({
   username: user.username,
   avatar: user.avatar,
   avatarType: user.avatarType,
+  profilePhotos: user.profilePhotos || [],
   age: user.age,
   showAge: user.showAge,
   bio: user.bio,
@@ -99,12 +101,13 @@ const register = async ({ name, email, password, username, bio, avatar, avatarTy
   const token = generateToken(user.id);
 
   // Kayıt tamamlandıktan sonra geçici avatar kalıcı kullanıcı anahtarına taşınır.
-  if (avatar && avatarType === 'upload') {
+  if (avatar && (avatarType === 'upload' || avatarType === 'photo')) {
     try {
       const finalUrl = await finalizeAvatar(avatar, user.id);
       if (finalUrl !== avatar) {
-        await prisma.user.update({ where: { id: user.id }, data: { avatar: finalUrl } });
+        await prisma.user.update({ where: { id: user.id }, data: { avatar: finalUrl, profilePhotos: [finalUrl] } });
         user.avatar = finalUrl;
+        user.profilePhotos = [finalUrl];
       }
     } catch (err) {
       console.error('Avatar finalize hatası (kritik değil):', err.message);

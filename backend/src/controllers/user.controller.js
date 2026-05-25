@@ -9,9 +9,9 @@ const getProfile = asyncHandler(async (req, res) => {
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
-  const { name, username, bio, avatar, avatarType, age, showAge } = req.validated.body;
+  const { name, username, bio, avatar, avatarType, profilePhotos, age, showAge } = req.validated.body;
   // Güncelleme alanları controller'da açıkça seçilerek istemciden gelen gereksiz veri içeri alınmaz.
-  const updated = await userService.updateProfile(req.user.userId, { name, username, bio, avatar, avatarType, age, showAge });
+  const updated = await userService.updateProfile(req.user.userId, { name, username, bio, avatar, avatarType, profilePhotos, age, showAge });
   ok(res, updated);
 });
 

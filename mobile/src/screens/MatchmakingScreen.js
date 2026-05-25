@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
-  View, Text, Image, StyleSheet, ActivityIndicator,
+  View, Text, Image, ImageBackground, StyleSheet, ActivityIndicator,
   Animated, Dimensions, Alert, Pressable, FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,12 +11,16 @@ import {
   State,
 } from 'react-native-gesture-handler';
 import api from '../services/api';
+import { normalizeImageUri } from '../services/imageUri';
 import { Radii, Shadows } from '../theme';
 import MatchModal from '../components/MatchModal';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { useAppDrawer } from '../context/DrawerContext';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SW * 0.25;
+const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
 
 const T = {
   bg: '#05060a',
@@ -31,10 +35,18 @@ const T = {
   textMuted: '#444466',
 };
 
+const getProfilePhotos = (user) => {
+  const photos = Array.isArray(user?.profilePhotos) ? user.profilePhotos.filter(Boolean) : [];
+  const merged = user?.avatar ? [user.avatar, ...photos.filter((photo) => photo !== user.avatar)] : photos;
+  return merged.slice(0, 3).map(normalizeImageUri).filter(Boolean);
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MatchmakingScreen({ navigation }) {
   const { user: currentUser } = useAuth();
+  const { theme: themeColors, movieTheme } = useTheme();
+  const { openDrawer } = useAppDrawer();
   const [users, setUsers] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -202,7 +214,7 @@ export default function MatchmakingScreen({ navigation }) {
   if (loading) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <GradientShell center>
+        <GradientShell center themeColors={themeColors} movieTheme={movieTheme}>
           <ActivityIndicator color={T.accent} size="large" />
           <Text style={styles.loadingText}>Kişiler yükleniyor...</Text>
         </GradientShell>
@@ -216,7 +228,7 @@ export default function MatchmakingScreen({ navigation }) {
   if (!current) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <GradientShell center>
+        <GradientShell center themeColors={themeColors} movieTheme={movieTheme}>
           <Text style={styles.doneEmoji}>🎬</Text>
           <Text style={styles.doneTitle}>Tur {round} tamamlandı!</Text>
           <Text style={styles.doneSub}>Atlananlar 24 saat sonra tekrar görünecek</Text>
@@ -230,10 +242,21 @@ export default function MatchmakingScreen({ navigation }) {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <GradientShell>
+      <GradientShell themeColors={themeColors} movieTheme={movieTheme}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
-            <Text style={styles.title}>Match</Text>
+            <View style={styles.titleGroup}>
+              <Pressable
+                style={styles.drawerButton}
+                onPress={openDrawer}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <View style={[styles.drawerLine, { width: 20 }]} />
+                <View style={[styles.drawerLine, styles.drawerLineAccent, { width: 14 }]} />
+                <View style={[styles.drawerLine, { width: 20 }]} />
+              </Pressable>
+              <Text style={styles.title} numberOfLines={1}>Match</Text>
+            </View>
             <Pressable style={styles.matchesPill} onPress={() => navigation.navigate('Matches')}>
               <View style={styles.matchesPillIcon}>
                 <Text style={styles.matchesPillIconText}>♥</Text>
@@ -308,27 +331,47 @@ export default function MatchmakingScreen({ navigation }) {
 
 // ─── GradientShell ────────────────────────────────────────────────────────────
 
-function GradientShell({ children, center }) {
+function GradientShell({ children, center, themeColors, movieTheme }) {
+  const backgroundImage = movieTheme?.matchmakingBackgroundImage || DEFAULT_BACKGROUND;
+  const themeGradient = movieTheme?.gradient || null;
+  const defaultGradient = ['#260408', '#07080d', '#030407'];
+  const colors = backgroundImage
+    ? ['rgba(8,5,2,0.28)', 'rgba(7,8,13,0.72)', 'rgba(3,4,7,0.95)']
+    : themeGradient || defaultGradient;
+  const locations = backgroundImage ? [0, 0.46, 1] : [0, 0.42, 1];
+  const content = (
+    <>
+      <LinearGradient
+        colors={colors}
+        locations={locations}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={[styles.shellContent, center && styles.shellContentCenter]}>
+        {children}
+      </View>
+    </>
+  );
+
   return (
-    <LinearGradient
-      colors={['#260408', '#07080d', '#030407']}
-      locations={[0, 0.42, 1]}
+    <ImageBackground
+      source={backgroundImage}
       style={[styles.container, center && styles.center]}
+      resizeMode="cover"
     >
-      <View style={styles.redBloom} />
-      <View style={styles.violetBloom} />
-      {children}
-    </LinearGradient>
+      {content}
+    </ImageBackground>
   );
 }
 
 // ─── BackCardContent ──────────────────────────────────────────────────────────
 
 function BackCardContent({ user }) {
+  const photos = getProfilePhotos(user);
+  const mainPhoto = photos[0];
   return (
     <View style={{ flex: 1, backgroundColor: '#11131b' }}>
-      {user.avatar
-        ? <Image source={{ uri: user.avatar }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      {mainPhoto
+        ? <Image source={{ uri: mainPhoto }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         : <View style={[StyleSheet.absoluteFill, { backgroundColor: '#171923', justifyContent: 'center', alignItems: 'center' }]}>
             <Text style={{ color: '#fff', fontSize: 72, fontWeight: '900' }}>{user.name?.[0]?.toUpperCase()}</Text>
           </View>
@@ -351,9 +394,32 @@ function BackCardContent({ user }) {
 //   [4] Foto 3   — boşluk (ileride 3. profil fotoğrafı)
 //   [5] Info 3   — Hakkında
 
+function ProfilePhotoSlide({ uri }) {
+  return (
+    <View style={styles.slidePhoto}>
+      <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      <LinearGradient
+        colors={['rgba(5,6,10,0.08)', 'transparent', 'rgba(5,6,10,0.2)']}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
+  );
+}
+
+function EmptyPhotoSlide({ icon }) {
+  return (
+    <View style={[styles.slidePhoto, styles.slidePlaceholder]}>
+      <Text style={styles.placeholderIcon}>{icon}</Text>
+      <Text style={styles.placeholderText}>Daha fazla fotoğraf eklenmemiş</Text>
+    </View>
+  );
+}
+
 function UserCardContent({ user, listRef, panRef, onLike }) {
   const recentMovies = user.movies?.slice(0, 3) ?? [];
   const hasCommonMovies = user.commonMovies > 0 && user.movies?.length > 0;
+  const photos = getProfilePhotos(user);
 
   const slides = [
     { key: 'photo1', type: 'photo1' },
@@ -370,8 +436,8 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
       case 'photo1':
         return (
           <View style={styles.slidePhoto}>
-            {user.avatar
-              ? <Image source={{ uri: user.avatar }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            {photos[0]
+              ? <Image source={{ uri: photos[0] }} style={StyleSheet.absoluteFill} resizeMode="cover" />
               : <View style={[StyleSheet.absoluteFill, styles.avatarFallback]}>
                   <Text style={styles.avatarInitialLarge}>{user.name?.[0]?.toUpperCase()}</Text>
                 </View>
@@ -435,12 +501,7 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
         );
 
       case 'photo2':
-        return (
-          <View style={[styles.slidePhoto, styles.slidePlaceholder]}>
-            <Text style={styles.placeholderIcon}>📷</Text>
-            <Text style={styles.placeholderText}>Yakında daha fazla fotoğraf</Text>
-          </View>
-        );
+        return photos[1] ? <ProfilePhotoSlide uri={photos[1]} /> : <EmptyPhotoSlide icon="📷" />;
 
       case 'info2':
         return (
@@ -459,12 +520,7 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
         );
 
       case 'photo3':
-        return (
-          <View style={[styles.slidePhoto, styles.slidePlaceholder]}>
-            <Text style={styles.placeholderIcon}>🎬</Text>
-            <Text style={styles.placeholderText}>Yakında daha fazla fotoğraf</Text>
-          </View>
-        );
+        return photos[2] ? <ProfilePhotoSlide uri={photos[2]} /> : <EmptyPhotoSlide icon="🎬" />;
 
       case 'info3':
         return (
@@ -479,7 +535,7 @@ function UserCardContent({ user, listRef, panRef, onLike }) {
       default:
         return null;
     }
-  }, [user, recentMovies, hasCommonMovies]);
+  }, [user, recentMovies, hasCommonMovies, photos]);
 
   return (
     <NativeViewGestureHandler
@@ -531,22 +587,49 @@ function ActionBtn({ onPress, style, disabled, label, icon, iconColor }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: T.bg },
   center: { justifyContent: 'center', alignItems: 'center', padding: 24 },
-
-  redBloom: {
-    position: 'absolute', width: 320, height: 320, borderRadius: 160,
-    left: -130, top: -95, backgroundColor: 'rgba(200,16,46,0.16)',
+  shellContent: {
+    flex: 1,
+    width: '100%',
   },
-  violetBloom: {
-    position: 'absolute', width: 230, height: 230, borderRadius: 115,
-    right: -95, top: 220, backgroundColor: 'rgba(126,78,255,0.05)',
+  shellContentCenter: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
   },
 
   header: {
-    paddingHorizontal: 24, paddingTop: 54, paddingBottom: 6,
+    paddingHorizontal: 20, paddingTop: 58, paddingBottom: 8,
     flexDirection: 'column',
   },
   headerTop: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2,
+    minHeight: 42,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6,
+    gap: 12,
+  },
+  titleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexShrink: 1,
+  },
+  drawerButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  drawerLine: {
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: T.textPrimary,
+  },
+  drawerLineAccent: {
+    backgroundColor: T.accent,
   },
   undoFloating: {
     position: 'absolute',
@@ -567,16 +650,16 @@ const styles = StyleSheet.create({
     color: T.accent,
     marginTop: -1,
   },
-  title: { color: T.textPrimary, fontSize: 46, fontWeight: '900', letterSpacing: -1.8 },
-  subtitle: { color: T.textSecondary, fontSize: 14, marginTop: 2, maxWidth: SW * 0.58 },
+  title: { color: T.textPrimary, fontSize: 32, lineHeight: 38, fontWeight: '900', letterSpacing: -1, flexShrink: 1 },
+  subtitle: { color: T.textSecondary, fontSize: 14, fontWeight: '600', maxWidth: SW * 0.58 },
   matchesPill: {
-    height: 44,
-    borderRadius: 22,
-    paddingLeft: 7,
-    paddingRight: 12,
+    height: 38,
+    borderRadius: 19,
+    paddingLeft: 6,
+    paddingRight: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 6,
     backgroundColor: '#12131b',
     borderWidth: 1,
     borderColor: 'rgba(255,64,88,0.42)',
@@ -587,18 +670,18 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   matchesPillIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: 'rgba(255,64,88,0.16)',
     borderWidth: 0.5,
     borderColor: 'rgba(255,64,88,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  matchesPillIconText: { color: T.accent, fontSize: 13, fontWeight: '900', marginTop: -1 },
+  matchesPillIconText: { color: T.accent, fontSize: 12, fontWeight: '900', marginTop: -1 },
   matchesPillText: { color: T.textPrimary, fontFamily: 'Inter_800ExtraBold', fontSize: 12, letterSpacing: -0.1 },
-  matchesPillArrow: { color: T.accentSecondary, fontSize: 17, marginTop: -1 },
+  matchesPillArrow: { color: T.accentSecondary, fontSize: 16, marginTop: -1 },
   loadingText: { color: T.textMuted, marginTop: 14, fontSize: 13 },
 
   cardArea: {

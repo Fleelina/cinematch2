@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, Pressable, View, Platform } from 'react-native';
+import { Text, Pressable, View, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 
 import { useAuth } from '../context/AuthContext';
 import { OnboardingProvider } from '../context/OnboardingContext';
 import DrawerMenu from '../components/DrawerMenu';
 import { Colors } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { DrawerProvider, openAppDrawer, registerDrawerOpenHandler } from '../context/DrawerContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import Step1Username from '../screens/onboarding/Step1Username';
@@ -25,6 +29,9 @@ import MovieDetailScreen from '../screens/MovieDetailScreen';
 import PersonScreen from '../screens/PersonScreen';
 import SimilarMoviesScreen from '../screens/SimilarMoviesScreen';
 import SwipeScreen from '../screens/SwipeScreen';
+import GamesScreen from '../screens/GamesScreen';
+import MovieGuessScreen from '../screens/MovieGuessScreen';
+import PosterGuessScreen from '../screens/PosterGuessScreen';
 import WatchlistScreen from '../screens/WatchlistScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import ChatScreen from '../screens/ChatScreen';
@@ -40,6 +47,14 @@ import AllMoviesScreen from '../screens/AllMoviesScreen';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const TAB_ITEMS = {
+  Filmlerim: { icon: 'compass', label: 'Kesfet', themeIcon: 'discover' },
+  Swipe: { icon: 'film', label: 'Filmler', themeIcon: 'collections' },
+  Eslesmeler: { icon: 'layers', label: 'Match', themeIcon: 'match' },
+  Begeniler: { icon: 'heart', label: 'Likes', themeIcon: 'like' },
+  Mesajlar: { icon: 'message-circle', label: 'Mesaj', themeIcon: 'profile' },
+};
+
 const TAB_ICONS = {
   Swipe: '🔍',
   Filmlerim: '🎬',
@@ -47,37 +62,80 @@ const TAB_ICONS = {
   Mesajlar: '💬',
 };
 
-function CardsIcon({ focused }) {
+function CardsIcon({ focused, activeColor, inactiveColor }) {
+  const color = focused ? activeColor : inactiveColor;
+
   return (
-    <View style={{ width: 26, height: 26, position: 'relative' }}>
+    <View style={styles.cardsIcon}>
       <View style={{
-        position: 'absolute', top: 4, left: 4,
+        position: 'absolute', top: 5, left: 6,
         width: 18, height: 22, borderRadius: 4,
-        backgroundColor: focused ? Colors.red : 'transparent',
+        backgroundColor: focused ? activeColor : 'transparent',
         borderWidth: 1.5,
-        borderColor: focused ? Colors.red : '#555',
+        borderColor: color,
         opacity: 0.6,
       }} />
       <View style={{
         position: 'absolute', top: 0, left: 0,
         width: 18, height: 22, borderRadius: 4,
-        backgroundColor: focused ? Colors.red : 'transparent',
+        backgroundColor: focused ? activeColor : 'transparent',
         borderWidth: 1.5,
-        borderColor: focused ? Colors.red : '#555',
+        borderColor: color,
       }} />
     </View>
   );
 }
 
-function TabIcon({ name, focused }) {
+function TabIcon({ name, focused, activeColor, inactiveColor, nav, themeColors, movieTheme }) {
+  const meta = TAB_ITEMS[name] || TAB_ITEMS.Filmlerim;
+  const glow = nav.glow || activeColor;
+  const activePill = nav.activePill || themeColors.primarySoft || themeColors.purpleSoft || 'rgba(255,255,255,0.10)';
+  const activeBorder = nav.activeBorder || nav.border || themeColors.border;
+  const themeGlyph = movieTheme?.icons?.[meta.themeIcon];
+  const useThemeGlyph = Boolean(themeGlyph);
+
   return (
-    <View style={{ alignItems: 'center', gap: 3 }}>
-      {name === 'Eslesmeler'
-        ? <CardsIcon focused={focused} />
-        : <Text style={{ fontSize: 21, opacity: focused ? 1 : 0.45 }}>{TAB_ICONS[name]}</Text>
-      }
+    <View
+      style={[
+        styles.tabIconWrap,
+        focused && [
+          styles.tabIconWrapActive,
+          {
+            backgroundColor: activePill,
+            borderColor: activeBorder,
+            shadowColor: glow,
+          },
+        ],
+      ]}
+    >
+      {focused ? <View style={[styles.activeHalo, { backgroundColor: glow }]} /> : null}
+      <View style={[styles.iconPlate, focused && { borderColor: activeBorder, backgroundColor: activePill }]}>
+        {useThemeGlyph ? (
+          <Text
+            style={[
+              styles.themeGlyph,
+              { color: focused ? activeColor : inactiveColor, opacity: focused ? 1 : 0.74 },
+            ]}
+          >
+            {themeGlyph}
+          </Text>
+        ) : name === 'Eslesmeler' ? (
+          <CardsIcon focused={focused} activeColor={activeColor} inactiveColor={inactiveColor} />
+        ) : (
+          <Feather name={meta.icon} size={focused ? 17 : 16} color={focused ? activeColor : inactiveColor} />
+        )}
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.tabIconLabel,
+          { color: focused ? activeColor : inactiveColor, opacity: focused ? 1 : 0.68 },
+        ]}
+      >
+        {meta.label}
+      </Text>
       {focused ? (
-        <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.red }} />
+        <View style={[styles.activeDot, { backgroundColor: nav.activeDot?.color || activeColor }]} />
       ) : null}
     </View>
   );
@@ -97,42 +155,88 @@ function HamburgerButton({ onPress }) {
   );
 }
 
-function MainTabs() {
+function GlobalDrawer() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => registerDrawerOpenHandler(() => setDrawerOpen(true)), []);
+
+  return <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />;
+}
+
+function MainTabs() {
   const insets = useSafeAreaInsets();
+  const { theme: themeColors, movieTheme } = useTheme();
+
   const tabBarBottomPadding = insets.bottom > 0 ? insets.bottom : 0;
+
+  const nav = movieTheme?.navbar || {};
+
+  const activeColor = nav.active || themeColors.red || Colors.red;
+  const inactiveColor = nav.inactive || themeColors.textMuted || 'rgba(255,255,255,0.45)';
+  const bgColor = nav.background || themeColors.bgSoft || themeColors.bg || Colors.bg;
+  const borderColor = nav.border || themeColors.border || Colors.border;
+  const barGradient = nav.gradient || [bgColor, themeColors.bg || bgColor];
 
   const screenOptions = ({ route }) => ({
     headerShown: true,
     headerStyle: {
-      backgroundColor: Colors.bg,
+      backgroundColor: bgColor,
       shadowColor: 'transparent',
       elevation: 0,
       borderBottomWidth: 0.5,
-      borderBottomColor: Colors.border,
+      borderBottomColor: borderColor,
     },
-    headerTintColor: '#fff',
+    headerTintColor: themeColors.textPrimary || '#fff',
     headerTitleStyle: { fontWeight: '800', fontSize: 18, letterSpacing: -0.3 },
-    headerLeft: () => <HamburgerButton onPress={() => setDrawerOpen(true)} />,
+    headerLeft: () => <HamburgerButton onPress={openAppDrawer} />,
     tabBarStyle: {
-      backgroundColor: Colors.bg,
-      borderTopColor: Colors.border,
-      borderTopWidth: 0.5,
-      height: 60 + tabBarBottomPadding,
-      paddingBottom: tabBarBottomPadding,
-      paddingTop: 6,
-      marginBottom: Platform.OS === 'android' ? -16 : -16,
+      position: 'absolute',
+      left: -40,
+      right: -40,
+      bottom: Platform.OS === 'android' ? -24 : -14,
+      backgroundColor: 'transparent',
+      borderTopWidth: 0,
+      height: 58 + tabBarBottomPadding,
+      paddingBottom: tabBarBottomPadding + 2,
+      paddingTop: 5,
+      borderRadius: 0,
+      elevation: 18,
+      shadowColor: nav.glow || '#000',
+      shadowOpacity: movieTheme ? 0.28 : 0.16,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 10 },
     },
     tabBarItemStyle: { flex: 1 },
-    tabBarActiveTintColor: Colors.red,
-    tabBarInactiveTintColor: '#555',
+    tabBarBackground: () => (
+      <View style={[styles.tabBarBackground, { borderColor }]}>
+        <LinearGradient
+          colors={barGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.tabBarSheen, { backgroundColor: nav.glow || activeColor }]} />
+      </View>
+    ),
+    tabBarActiveTintColor: activeColor,
+    tabBarInactiveTintColor: inactiveColor,
     lazy: true,
     tabBarShowLabel: false,
-    tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} />,
+    tabBarIcon: ({ focused }) => (
+      <TabIcon
+        name={route.name}
+        focused={focused}
+        activeColor={activeColor}
+        inactiveColor={inactiveColor}
+        nav={nav}
+        themeColors={themeColors}
+        movieTheme={movieTheme}
+      />
+    ),
   });
 
   return (
-    <>
+    <DrawerProvider>
       <Tab.Navigator screenOptions={screenOptions}>
         <Tab.Screen name="Filmlerim" component={DiscoverScreen} options={{ title: 'Keşfet' }} />
         <Tab.Screen name="Swipe" component={SwipeScreen} options={{ title: 'Filmler' }} />
@@ -140,8 +244,8 @@ function MainTabs() {
         <Tab.Screen name="Begeniler" component={LikesScreen} options={{ title: 'Beğeniler' }} />
         <Tab.Screen name="Mesajlar" component={MessagesScreen} options={{ title: 'Mesajlar', headerShown: false }} />
       </Tab.Navigator>
-      <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
-    </>
+      <GlobalDrawer />
+    </DrawerProvider>
   );
 }
 
@@ -157,6 +261,9 @@ function AppStack() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="Matches" component={MatchesScreen} />
+      <Stack.Screen name="Games" component={GamesScreen} />
+      <Stack.Screen name="MovieGuess" component={MovieGuessScreen} />
+      <Stack.Screen name="PosterGuess" component={PosterGuessScreen} />
       <Stack.Screen name="Likes" component={LikesScreen} />
       <Stack.Screen name="MyProfile" component={ProfileScreen} />
       <Stack.Screen name="Stats" component={StatsScreen} />
@@ -190,6 +297,81 @@ function AuthStack() {
     </Stack.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBarBackground: {
+    ...StyleSheet.absoluteFillObject,
+    left: -40,
+    right: -40,
+    borderRadius: 0,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  tabBarSheen: {
+    position: 'absolute',
+    left: 26,
+    right: 26,
+    top: 0,
+    height: 1,
+    opacity: 0.72,
+  },
+  tabIconWrap: {
+    minWidth: 58,
+    height: 42,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  tabIconWrapActive: {
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  activeHalo: {
+    position: 'absolute',
+    top: -18,
+    width: 42,
+    height: 28,
+    borderRadius: 21,
+    opacity: 0.22,
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 1,
+  },
+  iconPlate: {
+    width: 28,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  themeGlyph: {
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  tabIconLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  cardsIcon: {
+    width: 24,
+    height: 22,
+    position: 'relative',
+  },
+});
 
 export default function AppNavigator() {
   const { user, loading } = useAuth();

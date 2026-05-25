@@ -49,7 +49,7 @@ export default function Step4Photo({ navigation }) {
         mimeType,
       });
       setAvatar(res.data.url);
-      update({ avatar: res.data.url, avatarType: 'photo' });
+      update({ avatar: res.data.url, avatarType: 'upload' });
     } catch (err) {
       const msg = err.response?.data?.error || 'Fotoğraf yüklenemedi. Tekrar dene.';
       Alert.alert('Hata', msg);

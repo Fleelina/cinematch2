@@ -1,4 +1,4 @@
-const { uploadToR2 } = require('../services/upload.service');
+const { uploadToR2, getFromR2 } = require('../services/upload.service');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { ok } = require('../utils/response');
 
@@ -16,4 +16,13 @@ const uploadAvatarPublic = asyncHandler(async (req, res) => {
   ok(res, { url });
 });
 
-module.exports = { uploadAvatar, uploadAvatarPublic };
+const getAvatarFile = asyncHandler(async (req, res) => {
+  const key = `avatars/${req.params.filename}`;
+  const object = await getFromR2(key);
+
+  res.setHeader('Content-Type', object.ContentType || 'image/jpeg');
+  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  object.Body.pipe(res);
+});
+
+module.exports = { uploadAvatar, uploadAvatarPublic, getAvatarFile };

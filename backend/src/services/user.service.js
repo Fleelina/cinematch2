@@ -61,7 +61,7 @@ const discoverUsers = async (userId) => {
     where: { id: { notIn: excludedIds } },
     select: {
       id: true, name: true, username: true, bio: true,
-      avatar: true, avatarType: true, age: true, showAge: true,
+      avatar: true, avatarType: true, profilePhotos: true, age: true, showAge: true,
       movies: {
         select: { movieId: true, movie: { select: { id: true, title: true, poster: true, tmdbId: true } } },
         take: 20,
@@ -195,6 +195,7 @@ const getBlockedUsers = async (userId) => {
           username: true,
           avatar: true,
           avatarType: true,
+          profilePhotos: true,
           bio: true,
           age: true,
           showAge: true,
@@ -215,7 +216,7 @@ const getBlockedUsers = async (userId) => {
 const getPublicProfile = async (userId) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, username: true, bio: true, avatar: true, avatarType: true, age: true, showAge: true, createdAt: true },
+    select: { id: true, name: true, username: true, bio: true, avatar: true, avatarType: true, profilePhotos: true, age: true, showAge: true, createdAt: true },
   });
   if (!user) return null;
   if (!user.showAge) user.age = null;
@@ -339,7 +340,7 @@ const fetchProfile = async (userId) => {
 
 // Profil guncellemesini parcali update mantigiyla yapar.
 // Yeni upload avatar geldiyse eski R2 objesi async olarak temizlenir.
-const updateProfile = async (userId, { name, username, bio, avatar, avatarType, age, showAge, gender }) => {
+const updateProfile = async (userId, { name, username, bio, avatar, avatarType, profilePhotos, age, showAge, gender }) => {
   if (username) {
     const taken = await isUsernameTaken(username, userId);
     if (taken) throw new ApiError(409, 'Bu kullanici adi zaten alinmis');
@@ -348,7 +349,7 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
   // Yeni avatar geliyorsa eski upload dosyasi best-effort olarak silinir.
   if (avatar) {
     const current = await prisma.user.findUnique({ where: { id: userId }, select: { avatar: true, avatarType: true } });
-    if (current?.avatar && current.avatarType === 'upload') {
+    if (current?.avatar && current.avatar !== avatar && (current.avatarType === 'upload' || current.avatarType === 'photo')) {
       setImmediate(() => deleteFromR2(current.avatar).catch((err) => console.error('[R2] Avatar silinemedi:', current.avatar, err)));
     }
   }
@@ -359,6 +360,7 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
     ...(bio !== undefined && { bio }),
     ...(avatar !== undefined && { avatar }),
     ...(avatarType !== undefined && { avatarType }),
+    ...(profilePhotos !== undefined && { profilePhotos: profilePhotos.slice(0, 3).filter(Boolean) }),
     ...(age !== undefined && { age: age ? parseInt(age, 10) : null }),
     ...(showAge !== undefined && { showAge }),
     ...(gender !== undefined && { gender: gender ?? null }),

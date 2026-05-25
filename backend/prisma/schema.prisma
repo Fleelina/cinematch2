@@ -17,6 +17,7 @@ model User {
   bio         String?
   avatar      String?
   avatarType  String?
+  profilePhotos String[] @default([])
   age         Int?
   showAge     Boolean  @default(false)
   gender      String?  // 'male' | 'female' | null — ileride eslestirme filtresi
@@ -31,6 +32,7 @@ model User {
   ratings           MovieRating[]
   sentMessages      Message[]
   watchlist         Watchlist[]
+  dailyTasteResults DailyTasteResult[]
 }
 
 model Movie {
@@ -149,4 +151,20 @@ model Message {
   @@index([senderId])
   @@index([movieId])
   @@index([matchId, createdAt])
+}
+
+model DailyTasteResult {
+  id              String   @id @default(cuid())
+  userId          String
+  date            String
+  mood            String
+  scores          String
+  answers         String
+  recommendations String
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
 }

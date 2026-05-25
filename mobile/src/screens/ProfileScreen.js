@@ -1,19 +1,25 @@
 import React, { useState, useCallback } from 'react';
+import ThemePicker from '../components/ThemePicker';
 import * as DocumentPicker from 'expo-document-picker';
 import {
   View, Text, Image, ScrollView, StyleSheet,
-  TouchableOpacity, ActivityIndicator, Pressable,
+  TouchableOpacity, ActivityIndicator, Pressable, Modal,
+  FlatList, Dimensions,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext'; // Tema eklendi
 import api from '../services/api';
+import { normalizeImageUri } from '../services/imageUri';
 import { Radii } from '../theme';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 export default function ProfileScreen({ navigation }) {
-  const { user } = useAuth();
-  const { theme, isDark } = useTheme(); // Temayı dinliyoruz
+  const { user, setUser } = useAuth();
+  const { theme, isDark, movieTheme } = useTheme();
+  const [themePickerVisible, setThemePickerVisible] = useState(false);
   const [stats, setStats] = useState(null);
   const [blockedCount, setBlockedCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -21,15 +27,18 @@ export default function ProfileScreen({ navigation }) {
   const [importSummary, setImportSummary] = useState(null);
   const [importError, setImportError] = useState('');
   const [showUnmatched, setShowUnmatched] = useState(false);
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
 
   const styles = createStyles(theme, isDark); // Dinamik stiller fırlatıldı
 
   const fetchProfileData = useCallback(async () => {
     try {
-      const [statsRes, blockedRes] = await Promise.all([
+      const [profileRes, statsRes, blockedRes] = await Promise.all([
+        api.get('/users/profile'),
         api.get('/users/profile/stats'),
         api.get('/users/profile/blocked'),
       ]);
+      setUser((prev) => ({ ...prev, ...profileRes.data }));
       setStats(statsRes.data);
       setBlockedCount(blockedRes.data?.length ?? 0);
     } catch {
@@ -37,7 +46,7 @@ export default function ProfileScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setUser]);
 
   useFocusEffect(useCallback(() => {
     fetchProfileData();
@@ -75,17 +84,24 @@ export default function ProfileScreen({ navigation }) {
           <Feather name="lock" size={13} color={theme.textMuted} style={{ marginRight: 6 }} />
           <Text style={styles.appBarUsername}>{user?.username || 'profil'}</Text>
         </View>
-        <TouchableOpacity style={styles.appBarIcon} onPress={() => navigation.navigate('Settings')}>
-          <Feather name="menu" size={22} color={theme.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.appBarActions}>
+          <TouchableOpacity style={styles.appBarIcon} onPress={() => setThemePickerVisible(true)}>
+            <Text style={{ fontSize: 16 }}>{movieTheme ? movieTheme.emoji : '🎬'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.appBarIcon} onPress={() => navigation.navigate('EditProfile')}>
+            <Feather name="more-horizontal" size={22} color={theme.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      <ThemePicker visible={themePickerVisible} onClose={() => setThemePickerVisible(false)} />
 
       {loading ? (
         <ActivityIndicator size="large" color={theme.purple} style={{ marginTop: 60 }} />
       ) : (
         <>
           <View style={styles.header}>
-            <Avatar user={user} theme={theme} size={82} />
+            <Avatar user={user} theme={theme} size={82} onPress={() => setAvatarModalVisible(true)} />
             <View style={styles.statsRow}>
               <TouchableOpacity style={styles.statItem} onPress={() => navigation.navigate('MyMovies')}>
                 <Text style={styles.statValue}>{stats?.movieCount ?? 0}</Text>
@@ -204,21 +220,150 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </>
       )}
+      <AvatarModal
+        visible={avatarModalVisible}
+        user={user}
+        theme={theme}
+        onClose={() => setAvatarModalVisible(false)}
+      />
     </ScrollView>
   );
 }
 
-function Avatar({ user, theme, size }) {
+function Avatar({ user, theme, size, onPress }) {
+  const avatarUri = normalizeImageUri(user?.avatar);
   return (
-    <View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: theme.glass, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: theme.purpleBorder }]}>
-      {user?.avatar ? (
-        <Image source={{ uri: user.avatar }} style={{ width: '100%', height: '100%', borderRadius: size / 2 }} />
+    <TouchableOpacity
+      activeOpacity={avatarUri ? 0.82 : 1}
+      onPress={avatarUri ? onPress : undefined}
+      style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: theme.glass, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: theme.purpleBorder, overflow: 'hidden' }]}
+    >
+      {avatarUri ? (
+        <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%', borderRadius: size / 2 }} />
       ) : (
         <Text style={{ color: theme.textPrimary, fontSize: size * 0.38, fontWeight: '900' }}>{user?.name?.[0]?.toUpperCase() || '?'}</Text>
       )}
-    </View>
+    </TouchableOpacity>
   );
 }
+
+function AvatarModal({ visible, user, theme, onClose }) {
+  const photos = getProfilePhotos(user);
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const listRef = React.useRef(null);
+  React.useEffect(() => {
+    if (visible) {
+      setActiveIndex(0);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+      });
+    }
+  }, [visible]);
+  if (photos.length === 0) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={stylesStatic.avatarModalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={stylesStatic.avatarModalContent}>
+          <FlatList
+            ref={listRef}
+            data={photos}
+            keyExtractor={(item, index) => `${item}-${index}`}
+            horizontal
+            pagingEnabled
+            scrollEnabled={photos.length > 1}
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled
+            directionalLockEnabled
+            bounces={false}
+            renderItem={({ item }) => (
+              <View style={stylesStatic.avatarModalPage}>
+                <Image source={{ uri: item }} style={stylesStatic.avatarModalImage} resizeMode="contain" />
+              </View>
+            )}
+            onMomentumScrollEnd={(event) => {
+              const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setActiveIndex(index);
+            }}
+          />
+          {photos.length > 1 ? (
+            <View style={stylesStatic.avatarModalDots}>
+              {photos.map((_, index) => (
+                <View
+                  key={index}
+                  style={[stylesStatic.avatarModalDot, index === activeIndex && stylesStatic.avatarModalDotActive]}
+                />
+              ))}
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={[stylesStatic.avatarModalClose, { backgroundColor: theme.glassStrong || theme.glass }]}
+            onPress={onClose}
+          >
+            <Feather name="x" size={22} color={theme.textPrimary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function getProfilePhotos(user) {
+  const photos = Array.isArray(user?.profilePhotos) ? user.profilePhotos.filter(Boolean) : [];
+  const merged = user?.avatar ? [user.avatar, ...photos.filter((photo) => photo !== user.avatar)] : photos;
+  return merged.slice(0, 3).map(normalizeImageUri).filter(Boolean);
+}
+
+const stylesStatic = StyleSheet.create({
+  avatarModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarModalContent: {
+    width: '100%',
+    aspectRatio: 1,
+    overflow: 'hidden',
+    backgroundColor: '#050506',
+  },
+  avatarModalPage: {
+    width: SCREEN_WIDTH,
+    aspectRatio: 1,
+  },
+  avatarModalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarModalDots: {
+    position: 'absolute',
+    bottom: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  avatarModalDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.36)',
+  },
+  avatarModalDotActive: {
+    width: 18,
+    backgroundColor: '#fff',
+  },
+  avatarModalClose: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
 
 // ARTIK STİLLER DİNAMİK OLARAK DETECT EDİLİYOR
 const createStyles = (theme, isDark) => StyleSheet.create({
@@ -228,6 +373,7 @@ const createStyles = (theme, isDark) => StyleSheet.create({
   appBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 58, paddingBottom: 12 },
   appBarLeft: { flexDirection: 'row', alignItems: 'center' },
   appBarUsername: { fontSize: 20, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.5 },
+  appBarActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   appBarIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: theme.glass, borderWidth: 1, borderColor: theme.border, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginTop: 8, gap: 20 },
   statsRow: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly', backgroundColor: theme.glass, borderRadius: 20, borderWidth: 1, borderColor: theme.border, paddingVertical: 14 },

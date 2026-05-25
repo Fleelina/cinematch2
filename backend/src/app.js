@@ -13,6 +13,7 @@ const personRoutes = require('./routes/person.routes');
 const messageRoutes = require('./routes/message.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const importRoutes = require('./routes/import.routes');
+const gameRoutes = require('./routes/game.routes');
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/persons', personRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/import', importRoutes);
+app.use('/api/games', gameRoutes);
 
 // Health check
 app.get('/', (req, res) => {

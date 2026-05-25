@@ -8,6 +8,7 @@ const updateProfile = z.object({
     bio: z.string().optional().nullable(),
     avatar: z.string().optional().nullable(),
     avatarType: z.string().optional().nullable(),
+    profilePhotos: z.array(z.string()).max(3).optional(),
     age: z.union([z.number(), z.string(), z.null()]).optional(),
     showAge: z.preprocess((v) => {
       if (v === true || v === 'true' || v === 1) return true;

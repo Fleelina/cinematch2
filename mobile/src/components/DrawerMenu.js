@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Animated,
   Dimensions, TouchableWithoutFeedback, Image, Alert,
@@ -10,6 +10,8 @@ import { Feather } from '@expo/vector-icons'; // 2. Modern ikon kütüphanesi
 
 const { width: screenWidth } = Dimensions.get('window');
 const drawerWidth = screenWidth * 0.72;
+const openDuration = 180;
+const closeDuration = 160;
 
 // Emojilerden arındırılmış modern menü yapısı
 const MENU_ITEMS = [
@@ -17,6 +19,7 @@ const MENU_ITEMS = [
   { screen: 'EditProfile', icon: 'edit-2', label: 'Profili Düzenle' },
   { screen: 'Stats', icon: 'bar-chart-2', label: 'İstatistiklerim' },
   { screen: 'Watchlist', icon: 'bookmark', label: 'Sonra İzle' },
+  { screen: 'Games', icon: 'play-circle', label: 'Oyunlar' },
   { screen: 'Matches', icon: 'heart', label: 'Eşleştirmeler' },
 ];
 
@@ -27,23 +30,23 @@ export default function DrawerMenu({ visible, onClose }) {
   const slideAnim = useRef(new Animated.Value(-drawerWidth)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(slideAnim, { toValue: 0, duration: 260, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 1, duration: 260, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: openDuration, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: openDuration, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(slideAnim, { toValue: -drawerWidth, duration: 220, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: -drawerWidth, duration: closeDuration, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0, duration: closeDuration, useNativeDriver: true }),
       ]).start();
     }
   }, [fadeAnim, slideAnim, visible]);
 
   const navigate = (screen) => {
     onClose();
-    setTimeout(() => navigation.navigate(screen), 220);
+    setTimeout(() => navigation.navigate(screen), closeDuration);
   };
 
   const handleLogout = () => {
@@ -56,10 +59,11 @@ export default function DrawerMenu({ visible, onClose }) {
     }, 300);
   };
 
-  if (!visible) return null;
-
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents={visible ? 'box-none' : 'none'}
+    >
       <TouchableWithoutFeedback onPress={onClose}>
         <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} />
       </TouchableWithoutFeedback>
