@@ -1,4 +1,4 @@
-import React, { useRef, useLayoutEffect } from 'react';
+import React, { useRef, useLayoutEffect, useCallback, startTransition } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Animated,
   Dimensions, TouchableWithoutFeedback, Image, Alert,
@@ -77,6 +77,13 @@ export default function DrawerMenu({ visible, onClose }) {
     }, 300);
   };
 
+  const handleThemeToggle = useCallback(() => {
+    if (activeMovieThemeId) return;
+    startTransition(() => {
+      toggleTheme();
+    });
+  }, [activeMovieThemeId, toggleTheme]);
+
   return (
     <View
       style={StyleSheet.absoluteFill}
@@ -137,7 +144,7 @@ export default function DrawerMenu({ visible, onClose }) {
         {/* TEMA DEĞİŞTİRME BUTONU (YENİ KISIM) */}
         <TouchableOpacity
           style={[styles.menuItem, activeMovieThemeId && styles.menuItemDisabled]}
-          onPress={toggleTheme}
+          onPress={handleThemeToggle}
           activeOpacity={0.7}
           disabled={!!activeMovieThemeId}
         >

@@ -23,6 +23,11 @@ const getMovieSuggestions = asyncHandler(async (req, res) => {
   ok(res, { movies, hasMore: true });
 });
 
+const getDailySimilarMovies = asyncHandler(async (req, res) => {
+  const data = await movieService.getDailySimilarMovies(req.user.userId, req.query.slot);
+  ok(res, data);
+});
+
 const rateMovie = asyncHandler(async (req, res) => {
   const { tmdbId } = req.validated.params;
   const { rating } = req.validated.body;
@@ -122,6 +127,7 @@ module.exports = {
   searchMovies,
   getMovieDetail,
   getMovieSuggestions,
+  getDailySimilarMovies,
   rateMovie,
   addMovieToProfile,
   removeMovieFromProfile,

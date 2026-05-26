@@ -3,6 +3,7 @@ const cors = require('cors');
 
 const config = require('./config');
 const { errorHandler } = require('./middleware/errorHandler');
+const { globalApiLimiter } = require('./middleware/rateLimiters');
 
 // Routes
 const authRoutes = require('./routes/auth.routes');
@@ -17,6 +18,8 @@ const gameRoutes = require('./routes/game.routes');
 
 const app = express();
 
+app.set('trust proxy', config.trustProxy);
+
 const corsOptions = {
   origin(origin, callback) {
     if (config.nodeEnv !== 'production') return callback(null, true);
@@ -28,6 +31,7 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
+app.use('/api', globalApiLimiter);
 // Genel JSON limiti — DoS koruması icin dusuk tutulur.
 // Upload endpoint'i kendi 10mb limitini ayri olarak tanimlar.
 app.use((req, res, next) => {

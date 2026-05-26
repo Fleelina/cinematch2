@@ -75,11 +75,6 @@ function PosterPixelated({ round, theme }) {
           style={[stylesPoster.cropImage, { width: POSTER_WIDTH, height: POSTER_HEIGHT, left: 0, top: 0 }]}
         />
       ) : null}
-      <LinearGradient
-        colors={['rgba(255,255,255,0.08)', 'transparent', 'rgba(0,0,0,0.32)']}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={[stylesPoster.scanLine, { backgroundColor: theme.primary || theme.purple }]} />
     </View>
   );
 }
@@ -97,6 +92,7 @@ export default function PosterGuessScreen({ navigation }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [wrongGuesses, setWrongGuesses] = useState(0);
+  const [source, setSource] = useState('user_movies');
 
   const startPosterGuess = async () => {
     if (loading) return;
@@ -105,7 +101,7 @@ export default function PosterGuessScreen({ navigation }) {
     setGuessText('');
     setWrongGuesses(0);
     try {
-      const res = await api.post('/games/poster-guess/start');
+      const res = await api.post('/games/poster-guess/start', { source });
       setRound(res.data);
     } catch {
       setResult({ message: 'Oyun başlatılamadı. Birazdan tekrar dene.' });
@@ -134,6 +130,23 @@ export default function PosterGuessScreen({ navigation }) {
     }
   };
 
+  const revealNextPosterStage = async () => {
+    if (!round || loading || result?.revealed) return;
+    setLoading(true);
+    try {
+      const res = await api.post('/games/poster-guess/reveal', {
+        roundId: round.roundId,
+        stageIndex: round.stageIndex,
+        source: round.source,
+      });
+      setResult(res.data);
+      setRound(res.data.round);
+      setWrongGuesses((prev) => prev + 1);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const revealed = Boolean(result?.revealed);
   const stageNumber = (round?.stageIndex ?? 0) + 1;
 
@@ -155,6 +168,29 @@ export default function PosterGuessScreen({ navigation }) {
           <Text style={screenStyles.subtitle}>
             İlk turda poster çok pixelli görünür. Yanıldıkça görüntü netleşir, skor düşer.
           </Text>
+        </View>
+
+        <View style={screenStyles.sourceSwitch}>
+          <Pressable
+            style={[screenStyles.sourceButton, source === 'user_movies' && screenStyles.sourceButtonActive]}
+            onPress={() => setSource('user_movies')}
+            disabled={loading}
+          >
+            <Feather name="film" size={15} color={source === 'user_movies' ? theme.bg : theme.textSecondary} />
+            <Text style={[screenStyles.sourceButtonText, source === 'user_movies' && screenStyles.sourceButtonTextActive]}>
+              Kendi filmlerim
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[screenStyles.sourceButton, source === 'trending' && screenStyles.sourceButtonActive]}
+            onPress={() => setSource('trending')}
+            disabled={loading}
+          >
+            <Feather name="trending-up" size={15} color={source === 'trending' ? theme.bg : theme.textSecondary} />
+            <Text style={[screenStyles.sourceButtonText, source === 'trending' && screenStyles.sourceButtonTextActive]}>
+              Populer filmler
+            </Text>
+          </Pressable>
         </View>
 
         {!round && !loading ? (
@@ -222,6 +258,14 @@ export default function PosterGuessScreen({ navigation }) {
                 >
                   <Text style={screenStyles.primaryButtonText}>{loading ? 'Kontrol ediliyor...' : 'Tahmin Et'}</Text>
                 </Pressable>
+                <Pressable
+                  style={[screenStyles.revealButton, loading && screenStyles.disabled]}
+                  onPress={revealNextPosterStage}
+                  disabled={loading}
+                >
+                  <Feather name="eye" size={14} color={theme.textPrimary} />
+                  <Text style={screenStyles.revealButtonText}>Biraz daha aç</Text>
+                </Pressable>
               </>
             ) : null}
 
@@ -264,14 +308,6 @@ const stylesPoster = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#111',
   },
-  scanLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '47%',
-    height: 1,
-    opacity: 0.34,
-  },
 });
 
 function createStyles(theme) {
@@ -298,6 +334,40 @@ function createStyles(theme) {
     eyebrow: { color: accent, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
     title: { color: theme.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, marginTop: 8 },
     subtitle: { color: theme.textSecondary, fontSize: 14, lineHeight: 21, marginTop: 9 },
+    sourceSwitch: {
+      flexDirection: 'row',
+      gap: 10,
+      padding: 4,
+      borderRadius: 18,
+      backgroundColor: 'rgba(0,0,0,0.22)',
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginBottom: 16,
+    },
+    sourceButton: {
+      flex: 1,
+      height: 42,
+      borderRadius: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      backgroundColor: theme.glass,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    sourceButtonActive: {
+      backgroundColor: accent,
+      borderColor: accentBorder,
+    },
+    sourceButtonText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: '900',
+    },
+    sourceButtonTextActive: {
+      color: theme.bg,
+    },
     startButton: {
       height: 52,
       borderRadius: 18,
@@ -372,6 +442,19 @@ function createStyles(theme) {
     },
     disabled: { opacity: 0.45 },
     primaryButtonText: { color: theme.bg, fontSize: 13, fontWeight: '900' },
+    revealButton: {
+      height: 42,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 8,
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginTop: 9,
+    },
+    revealButtonText: { color: theme.textPrimary, fontSize: 13, fontWeight: '900' },
     resultBox: {
       marginTop: 12,
       padding: 13,

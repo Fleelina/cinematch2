@@ -11,5 +11,6 @@ router.post('/movie-guess/reveal', authMiddleware, gameController.revealMovieGue
 router.post('/movie-guess/guess', authMiddleware, gameController.submitMovieGuess);
 router.post('/poster-guess/start', authMiddleware, gameController.startPosterGuess);
 router.post('/poster-guess/guess', authMiddleware, gameController.submitPosterGuess);
+router.post('/poster-guess/reveal', authMiddleware, gameController.revealPosterGuessStage);
 
 module.exports = router;

@@ -48,18 +48,11 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TAB_ITEMS = {
-  Filmlerim: { icon: 'compass', label: 'Kesfet', themeIcon: 'discover' },
+  Filmlerim: { icon: 'compass', label: 'Keşfet', themeIcon: 'discover' },
   Swipe: { icon: 'film', label: 'Filmler', themeIcon: 'collections' },
-  Eslesmeler: { icon: 'layers', label: 'Match', themeIcon: 'match' },
-  Begeniler: { icon: 'heart', label: 'Likes', themeIcon: 'like' },
+  Eslesmeler: { icon: 'layers', label: 'Eşleşme', themeIcon: 'match' },
+  Begeniler: { icon: 'heart', label: 'Beğeni', themeIcon: 'like' },
   Mesajlar: { icon: 'message-circle', label: 'Mesaj', themeIcon: 'profile' },
-};
-
-const TAB_ICONS = {
-  Swipe: '🔍',
-  Filmlerim: '🎬',
-  Begeniler: '❤️',
-  Mesajlar: '💬',
 };
 
 function CardsIcon({ focused, activeColor, inactiveColor }) {
@@ -106,8 +99,8 @@ function DebouncedTabBarButton({ onPress, ...props }) {
 const TabIcon = memo(function TabIcon({ name, focused, activeColor, inactiveColor, nav, themeColors, movieTheme }) {
   const meta = TAB_ITEMS[name] || TAB_ITEMS.Filmlerim;
   const glow = nav.glow || activeColor;
-  const activePill = nav.activePill || themeColors.primarySoft || themeColors.purpleSoft || 'rgba(255,255,255,0.10)';
-  const activeBorder = nav.activeBorder || nav.border || themeColors.border;
+  const activePill = nav.activePill || themeColors.primarySoft || themeColors.purpleSoft || 'rgba(255,255,255,0.12)';
+  const activeBorder = nav.activeBorder || nav.border || themeColors.border || 'rgba(255,255,255,0.12)';
   const themeGlyph = movieTheme?.icons?.[meta.themeIcon];
   const useThemeGlyph = Boolean(themeGlyph);
 
@@ -125,13 +118,12 @@ const TabIcon = memo(function TabIcon({ name, focused, activeColor, inactiveColo
         ],
       ]}
     >
-      {focused ? <View style={[styles.activeHalo, { backgroundColor: glow }]} /> : null}
-      <View style={[styles.iconPlate, focused && { borderColor: activeBorder, backgroundColor: activePill }]}>
+      <View style={[styles.iconPlate, focused && styles.iconPlateActive]}>
         {useThemeGlyph ? (
           <Text
             style={[
               styles.themeGlyph,
-              { color: focused ? activeColor : inactiveColor, opacity: focused ? 1 : 0.74 },
+              { color: focused ? activeColor : inactiveColor, opacity: focused ? 1 : 0.72 },
             ]}
           >
             {themeGlyph}
@@ -151,13 +143,10 @@ const TabIcon = memo(function TabIcon({ name, focused, activeColor, inactiveColo
       >
         {meta.label}
       </Text>
-      {focused ? (
-        <View style={[styles.activeDot, { backgroundColor: nav.activeDot?.color || activeColor }]} />
-      ) : null}
+      {focused ? <View style={[styles.activeUnderline, { backgroundColor: nav.activeDot?.color || activeColor }]} /> : null}
     </View>
   );
 });
-
 function HamburgerButton({ onPress }) {
   return (
     <Pressable
@@ -183,16 +172,17 @@ function GlobalDrawer() {
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const { theme: themeColors, movieTheme } = useTheme();
-
-  const tabBarBottomPadding = insets.bottom > 0 ? insets.bottom : 0;
-
+  const tabBarBottomPadding = insets.bottom > 0 ? Math.max(2, insets.bottom - 12) : 0;
   const nav = movieTheme?.navbar || {};
-
+  const isMovieTheme = Boolean(movieTheme);
+  const bgColor = nav.background || (isMovieTheme ? 'rgba(8,8,12,0.88)' : themeColors.bgSoft || themeColors.bg || Colors.bg);
+  const borderColor = nav.border || themeColors.border || Colors.border;
   const activeColor = nav.active || themeColors.red || Colors.red;
   const inactiveColor = nav.inactive || themeColors.textMuted || 'rgba(255,255,255,0.45)';
-  const bgColor = nav.background || themeColors.bgSoft || themeColors.bg || Colors.bg;
-  const borderColor = nav.border || themeColors.border || Colors.border;
-  const barGradient = nav.gradient || [bgColor, themeColors.bg || bgColor];
+  const barGradient = nav.gradient || [
+    isMovieTheme ? 'rgba(16,16,24,0.94)' : bgColor,
+    isMovieTheme ? 'rgba(7,7,12,0.96)' : themeColors.bg || bgColor,
+  ];
 
   const screenOptions = ({ route }) => ({
     headerShown: true,
@@ -208,20 +198,21 @@ function MainTabs() {
     headerLeft: () => <HamburgerButton onPress={openAppDrawer} />,
     tabBarStyle: {
       position: 'absolute',
-      left: -40,
-      right: -40,
-      bottom: Platform.OS === 'android' ? -24 : -14,
+      left: 16,
+      right: 16,
+      bottom: Platform.OS === 'android' ? -14 : -12,
       backgroundColor: 'transparent',
       borderTopWidth: 0,
-      height: 58 + tabBarBottomPadding,
-      paddingBottom: tabBarBottomPadding + 2,
-      paddingTop: 5,
-      borderRadius: 0,
-      elevation: 18,
+      height: 66 + tabBarBottomPadding,
+      paddingBottom: tabBarBottomPadding,
+      paddingTop: 8,
+      paddingHorizontal: 8,
+      borderRadius: 28,
+      elevation: 20,
       shadowColor: nav.glow || '#000',
-      shadowOpacity: movieTheme ? 0.28 : 0.16,
-      shadowRadius: 22,
-      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: movieTheme ? 0.32 : 0.18,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 8 },
     },
     tabBarItemStyle: { flex: 1 },
     tabBarButton: (props) => <DebouncedTabBarButton {...props} />,
@@ -234,6 +225,7 @@ function MainTabs() {
           style={StyleSheet.absoluteFill}
         />
         <View style={[styles.tabBarSheen, { backgroundColor: nav.glow || activeColor }]} />
+        <View style={styles.tabBarGlass} />
       </View>
     ),
     tabBarActiveTintColor: activeColor,
@@ -320,70 +312,66 @@ function AuthStack() {
 const styles = StyleSheet.create({
   tabBarBackground: {
     ...StyleSheet.absoluteFillObject,
-    left: -40,
-    right: -40,
-    borderRadius: 0,
+    borderRadius: 28,
     borderWidth: 1,
     overflow: 'hidden',
   },
   tabBarSheen: {
     position: 'absolute',
-    left: 26,
-    right: 26,
+    left: 22,
+    right: 22,
     top: 0,
     height: 1,
     opacity: 0.72,
   },
+  tabBarGlass: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.035)',
+  },
   tabIconWrap: {
-    minWidth: 58,
-    height: 42,
-    borderRadius: 20,
+    minWidth: 56,
+    height: 48,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 3,
     borderWidth: 1,
     borderColor: 'transparent',
     overflow: 'hidden',
   },
   tabIconWrapActive: {
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
   },
-  activeHalo: {
+  activeUnderline: {
     position: 'absolute',
-    top: -18,
-    width: 42,
-    height: 28,
-    borderRadius: 21,
-    opacity: 0.22,
-  },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 1,
+    bottom: 4,
+    width: 16,
+    height: 2,
+    borderRadius: 1,
   },
   iconPlate: {
-    width: 28,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent',
+  },
+  iconPlateActive: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   themeGlyph: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '900',
-    lineHeight: 19,
+    lineHeight: 18,
     textAlign: 'center',
   },
   tabIconLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.2,
+    letterSpacing: 0,
   },
   cardsIcon: {
     width: 24,

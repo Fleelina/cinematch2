@@ -23,7 +23,7 @@ const startMovieGuess = asyncHandler(async (req, res) => {
 });
 
 const revealMovieGuessHint = asyncHandler(async (req, res) => {
-  const data = await gameService.revealMovieGuessHint(req.body.roundId, req.body.visibleHints);
+  const data = await gameService.revealMovieGuessHint(req.body.roundId, req.body.visibleHints, req.user.userId);
   ok(res, data);
 });
 
@@ -33,12 +33,17 @@ const submitMovieGuess = asyncHandler(async (req, res) => {
 });
 
 const startPosterGuess = asyncHandler(async (req, res) => {
-  const data = await gameService.startPosterGuess(req.user.userId);
+  const data = await gameService.startPosterGuess(req.user.userId, req.body?.source);
   ok(res, data);
 });
 
 const submitPosterGuess = asyncHandler(async (req, res) => {
   const data = await gameService.submitPosterGuess(req.body);
+  ok(res, data);
+});
+
+const revealPosterGuessStage = asyncHandler(async (req, res) => {
+  const data = await gameService.revealPosterGuessStage(req.body);
   ok(res, data);
 });
 
@@ -51,4 +56,5 @@ module.exports = {
   submitMovieGuess,
   startPosterGuess,
   submitPosterGuess,
+  revealPosterGuessStage,
 };

@@ -4,10 +4,11 @@ const movieController = require('../controllers/movie.controller');
 const authMiddleware = require('../middleware/auth.middleware');
 const validate = require('../middleware/validate');
 const movieValidator = require('../validators/movie.validator');
+const { publicMovieSearchLimiter } = require('../middleware/rateLimiters');
 
 // Onboarding icin auth gerektirmeyen public endpoint'ler
 router.get('/public/popular', movieController.getPublicPopular);
-router.get('/public/search', movieController.getPublicSearch);
+router.get('/public/search', publicMovieSearchLimiter, movieController.getPublicSearch);
 
 // Film endpoint'lerinin tamami authenticated kullanici baglaminda calisir.
 router.get('/trending', authMiddleware, movieController.getTrending);
@@ -16,6 +17,7 @@ router.get('/classics', authMiddleware, movieController.getClassics);
 router.get('/mood', authMiddleware, movieController.getMoodMovies);
 router.get('/search', authMiddleware, validate(movieValidator.searchMovies), movieController.searchMovies);
 router.get('/suggestions', authMiddleware, movieController.getMovieSuggestions);
+router.get('/daily-similar', authMiddleware, movieController.getDailySimilarMovies);
 router.get('/my', authMiddleware, movieController.getMyMovies);
 router.get('/watchlist', authMiddleware, movieController.getWatchlist);
 router.get('/detail/:tmdbId', authMiddleware, validate(movieValidator.tmdbIdParam), movieController.getMovieDetail);

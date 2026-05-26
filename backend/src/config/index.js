@@ -6,12 +6,21 @@ const parseOrigins = (value) =>
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+const parseTrustProxy = (value, nodeEnv) => {
+  if (value === undefined) return nodeEnv === 'production' ? 1 : false;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? value : parsed;
+};
+
 // Environment degiskenlerini uygulama ici tek config nesnesine toplar.
 const config = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET,
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY, process.env.NODE_ENV || 'development'),
 
   // Harici servis konfigurasyonlari.
   tmdbApiKey: process.env.TMDB_API_KEY,

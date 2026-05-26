@@ -12,6 +12,8 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useAppDrawer } from '../context/DrawerContext';
 
+const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_W = SCREEN_WIDTH * 0.8 * 0.58;
 const CARD_GAP = 16;
@@ -47,15 +49,29 @@ function Poster({ uri, width = 112, height = 168, radius = 22, T }) {
   );
 }
 
-function SectionHeader({ emoji, title, onViewAll, hideViewAll }) {
+function SectionHeader({ emoji, title, onViewAll, hideViewAll, sourceLabel, onSourcePress }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeaderLeft}>
-        <View style={styles.sectionIcon}><Text style={styles.sectionEmoji}>{emoji}</Text></View>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionEmoji}>{emoji}</Text>
+        {!!sourceLabel && (
+          <TouchableOpacity
+            style={styles.sourceMovieButton}
+            onPress={onSourcePress}
+            activeOpacity={0.78}
+          >
+            <Text style={styles.sourceMovieButtonText} numberOfLines={1}>{sourceLabel}</Text>
+          </TouchableOpacity>
+        )}
+        <Text
+          style={styles.sectionTitle}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
       </View>
       {!hideViewAll && (
-        <TouchableOpacity onPress={onViewAll} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity style={styles.sectionViewAllButton} onPress={onViewAll} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={styles.sectionViewAll}>Tümü ›</Text>
         </TouchableOpacity>
       )}
@@ -210,11 +226,11 @@ function MovieCard({ item, onPress, onAdd, showCinematch, isAdded, T }) {
 }
 
 const MOODS = [
-  { key: 'mind_bending', icon: '◎', label: 'Mind Bending', color: '#9b5cff', softColor: 'rgba(155,92,255,0.17)', borderColor: 'rgba(155,92,255,0.28)', sectionTitle: '🌀 Mind Bending Picks', sectionEmoji: '🌀' },
-  { key: 'emotional',    icon: '♡', label: 'Emotional',    color: '#ff3b55', softColor: 'rgba(255,59,85,0.18)',   borderColor: 'rgba(255,59,85,0.28)',  sectionTitle: '💔 Emotional Picks',       sectionEmoji: '💔' },
-  { key: 'dark',         icon: '☠', label: 'Dark',         color: '#aaaaaa', softColor: 'rgba(150,150,150,0.13)', borderColor: 'rgba(200,200,200,0.18)', sectionTitle: '🌑 Dark Picks for Tonight', sectionEmoji: '🌑' },
-  { key: 'feel_good',    icon: '☺', label: 'Feel Good',    color: '#f8c84a', softColor: 'rgba(248,200,74,0.14)',  borderColor: 'rgba(248,200,74,0.28)', sectionTitle: '☀️ Feel Good Films',       sectionEmoji: '☀️' },
-  { key: 'thrilling',    icon: '⌁', label: 'Thrilling',    color: '#ff3b55', softColor: 'rgba(255,59,85,0.18)',   borderColor: 'rgba(255,59,85,0.28)',  sectionTitle: '⚡ Thrilling Picks',        sectionEmoji: '⚡' },
+  { key: 'mind_bending', icon: '◎', label: 'Zihin Büken', color: '#9b5cff', softColor: 'rgba(155,92,255,0.17)', borderColor: 'rgba(155,92,255,0.28)', sectionTitle: 'Zihin Bükenler', sectionEmoji: '🌀' },
+  { key: 'emotional',    icon: '♡', label: 'Duygusal',    color: '#ff3b55', softColor: 'rgba(255,59,85,0.18)',   borderColor: 'rgba(255,59,85,0.28)',  sectionTitle: 'Duygusallar',       sectionEmoji: '💔' },
+  { key: 'dark',         icon: '☠', label: 'Karanlık',         color: '#aaaaaa', softColor: 'rgba(150,150,150,0.13)', borderColor: 'rgba(200,200,200,0.18)', sectionTitle: 'Karanlık Seçimler', sectionEmoji: '🌑' },
+  { key: 'feel_good',    icon: '☺', label: 'İyi Hissettiren',    color: '#f8c84a', softColor: 'rgba(248,200,74,0.14)',  borderColor: 'rgba(248,200,74,0.28)', sectionTitle: 'İyi Hissettirenler',       sectionEmoji: '☀️' },
+  { key: 'thrilling',    icon: '⌁', label: 'Heyecanlı',    color: '#ff3b55', softColor: 'rgba(255,59,85,0.18)',   borderColor: 'rgba(255,59,85,0.28)',  sectionTitle: 'Heyecanlılar',        sectionEmoji: '⚡' },
 ];
 
 function MoodLoadingText({ color, T }) {
@@ -240,7 +256,7 @@ function MoodLoadingText({ color, T }) {
 function MoodPills({ activeMood, onSelect }) {
   return (
     <View style={styles.moodSection}>
-      <SectionHeader emoji="🌙" title="Tonight's Mood" onViewAll={null} hideViewAll />
+      <SectionHeader emoji="🌙" title="Bu Akşamın Modu" onViewAll={null} hideViewAll />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moodList}>
         {MOODS.map((mood) => {
           const isActive = activeMood === mood.key;
@@ -259,12 +275,12 @@ function MoodPills({ activeMood, onSelect }) {
   );
 }
 
-function Section({ emoji, title, data, loading, onPress, onAdd, showCinematch, myMovieIds, endpoint, navigation, T }) {
+function Section({ emoji, title, data, loading, onPress, onAdd, showCinematch, myMovieIds, endpoint, navigation, T, sourceLabel, onSourcePress }) {
   const handleViewAll = () => navigation.navigate('AllMovies', { endpoint, title, emoji, showCinematch });
   if (loading) {
     return (
       <View style={styles.section}>
-        <SectionHeader emoji={emoji} title={title} onViewAll={handleViewAll} />
+        <SectionHeader emoji={emoji} title={title} onViewAll={handleViewAll} sourceLabel={sourceLabel} onSourcePress={onSourcePress} />
         <View style={styles.skeletonRow}>{[1, 2, 3].map((i) => <View key={i} style={styles.skeletonCard} />)}</View>
       </View>
     );
@@ -272,7 +288,7 @@ function Section({ emoji, title, data, loading, onPress, onAdd, showCinematch, m
   if (!data || data.length === 0) return null;
   return (
     <View style={styles.section}>
-      <SectionHeader emoji={emoji} title={title} onViewAll={handleViewAll} />
+      <SectionHeader emoji={emoji} title={title} onViewAll={handleViewAll} sourceLabel={sourceLabel} onSourcePress={onSourcePress} />
       <FlatList data={data} horizontal showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.tmdbId?.toString()}
         contentContainerStyle={{ paddingLeft: 24, paddingRight: 16 }}
@@ -341,13 +357,14 @@ export default function DiscoverScreen({ navigation }) {
   success: themeColors.success,
 };
   styles = React.useMemo(() => createStyles(T), [themeColors, movieTheme]);
-  const backgroundImage = movieTheme?.backgroundImage || null;
-  const bgGradient = movieTheme?.gradient || (isDark
-    ? ['#050506', '#0B0B10', '#050506']
-    : ['#d7dce5', '#c8d0dc', '#b8c2d0']);
-  const overlayGradient = backgroundImage
+  const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
+  const overlayGradient = movieTheme?.backgroundImage
     ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.58)', 'rgba(5,5,6,0.9)']
-    : bgGradient;
+    : (movieTheme?.gradient
+        ? [movieTheme.gradient[0] + 'ee', movieTheme.gradient[1] + 'cc', movieTheme.gradient[2] || T.bg]
+        : isDark
+          ? ['rgba(5,5,6,0.10)', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.88)']
+          : ['#d7dce5', '#c8d0dc', '#b8c2d0']);
   const avatarLetter = user?.name ? user.name.charAt(0).toUpperCase() : '?';
   const avatarUri = normalizeImageUri(user?.avatar);
   const [query, setQuery] = useState('');
@@ -358,10 +375,16 @@ export default function DiscoverScreen({ navigation }) {
   const [myMovieIds, setMyMovieIds] = useState(new Set());
   const [trending, setTrending] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [dailySimilar, setDailySimilar] = useState([]);
+  const [dailySourceMovie, setDailySourceMovie] = useState(null);
+  const [dailySimilarAlt, setDailySimilarAlt] = useState([]);
+  const [dailySourceMovieAlt, setDailySourceMovieAlt] = useState(null);
   const [topRated, setTopRated] = useState([]);
   const [classics, setClassics] = useState([]);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
+  const [loadingDailySimilar, setLoadingDailySimilar] = useState(true);
+  const [loadingDailySimilarAlt, setLoadingDailySimilarAlt] = useState(true);
   const [loadingTopRated, setLoadingTopRated] = useState(true);
   const [loadingClassics, setLoadingClassics] = useState(true);
   const [activeMood, setActiveMood] = useState(null);
@@ -392,6 +415,14 @@ export default function DiscoverScreen({ navigation }) {
   useEffect(() => {
     api.get('/movies/trending').then((r) => setTrending(r.data?.movies || r.data || [])).catch(() => {}).finally(() => setLoadingTrending(false));
     api.get('/movies/suggestions').then((r) => setSuggestions((r.data?.movies || r.data || []).slice(0, 15))).catch(() => {}).finally(() => setLoadingSuggestions(false));
+    api.get('/movies/daily-similar?slot=0').then((r) => {
+      setDailySourceMovie(r.data?.sourceMovie || null);
+      setDailySimilar(r.data?.movies || []);
+    }).catch(() => {}).finally(() => setLoadingDailySimilar(false));
+    api.get('/movies/daily-similar?slot=1').then((r) => {
+      setDailySourceMovieAlt(r.data?.sourceMovie || null);
+      setDailySimilarAlt(r.data?.movies || []);
+    }).catch(() => {}).finally(() => setLoadingDailySimilarAlt(false));
     api.get('/movies/top-rated-cinematch').then((r) => setTopRated(r.data?.movies || r.data || [])).catch(() => {}).finally(() => setLoadingTopRated(false));
     api.get('/movies/classics').then((r) => setClassics(r.data?.movies || r.data || [])).catch(() => {}).finally(() => setLoadingClassics(false));
   }, []);
@@ -482,12 +513,12 @@ export default function DiscoverScreen({ navigation }) {
                 <View style={[styles.drawerLine, { width: 14, backgroundColor: T.gold }]} />
                 <View style={[styles.drawerLine, { width: 20, backgroundColor: T.text }]} />
               </TouchableOpacity>
-              <Text style={styles.heroTitle}>Discover</Text>
+              <Text style={styles.heroTitle}>Keşfet</Text>
             </View>
             <View style={styles.heroActions}>
               <TouchableOpacity style={styles.watchlistButton} onPress={() => navigation.navigate('Watchlist')}>
                 <Text style={styles.watchlistIcon}>🔖</Text>
-                <Text style={styles.watchlistText}>My Watchlist</Text>
+                <Text style={styles.watchlistText}>İzleme Listem</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.avatarButton} onPress={() => navigation.navigate('MyProfile')}>
                 {avatarUri && !avatarFailed ? (
@@ -499,7 +530,7 @@ export default function DiscoverScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.heroSubtitle}>Find your next <Text style={styles.heroSubtitleAccent}>obsession</Text></Text>
+          <Text style={styles.heroSubtitle}>Sıradaki <Text style={styles.heroSubtitleAccent}>favorini</Text> bul</Text>
         </View>
 
         <View style={[styles.searchRow, searchFocused && styles.searchRowFocused]}>
@@ -561,8 +592,20 @@ export default function DiscoverScreen({ navigation }) {
           >
             <FeaturedCarousel data={featured} onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} T={T} />
 
-            <Section emoji="✦" title="Because you liked Interstellar" data={suggestions} loading={loadingSuggestions}
-              onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/suggestions" navigation={navigation} T={T} />
+            <Section
+              emoji="🎬"
+              title="İzlediğin İçin"
+              data={dailySimilar}
+              loading={loadingDailySimilar}
+              onPress={goDetail}
+              onAdd={addMovie}
+              myMovieIds={myMovieIds}
+              endpoint="/movies/daily-similar?slot=0"
+              navigation={navigation}
+              T={T}
+              sourceLabel={dailySourceMovie?.title}
+              onSourcePress={() => dailySourceMovie && goDetail(dailySourceMovie)}
+            />
 
             <MoodPills activeMood={activeMood} onSelect={handleMoodSelect} />
 
@@ -572,7 +615,7 @@ export default function DiscoverScreen({ navigation }) {
                 <MoodLoadingText color={mood?.color} T={T} />
               ) : (
                 <Animated.View style={{ opacity: moodAnim, transform: [{ translateY: moodAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }}>
-                  <Section emoji={mood?.sectionEmoji || '🌙'} title={mood?.sectionTitle || 'Mood Picks'}
+                  <Section emoji={mood?.sectionEmoji || '🌙'} title={mood?.sectionTitle || 'Mod Seçimleri'}
                     data={moodMovies} loading={false} onPress={goDetail} onAdd={addMovie}
                     myMovieIds={myMovieIds} endpoint={`/movies/mood?mood=${activeMood}`} navigation={navigation} T={T}
                   />
@@ -580,11 +623,25 @@ export default function DiscoverScreen({ navigation }) {
               );
             })() : null}
 
-            <Section emoji="🔥" title="Most Matched This Week" data={trending} loading={loadingTrending}
+            <Section emoji="🔥" title="Haftanın Popülerleri" data={trending} loading={loadingTrending}
               onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/trending" navigation={navigation} T={T} />
-            <Section emoji="❤" title="CinemaMatch En Yüksek Puanlılar" data={topRated} loading={loadingTopRated}
+            <Section
+              emoji="🎬"
+              title="İzlediğin İçin"
+              data={dailySimilarAlt}
+              loading={loadingDailySimilarAlt}
+              onPress={goDetail}
+              onAdd={addMovie}
+              myMovieIds={myMovieIds}
+              endpoint="/movies/daily-similar?slot=1"
+              navigation={navigation}
+              T={T}
+              sourceLabel={dailySourceMovieAlt?.title}
+              onSourcePress={() => dailySourceMovieAlt && goDetail(dailySourceMovieAlt)}
+            />
+            <Section emoji="❤" title="CineMatch Enleri" data={topRated} loading={loadingTopRated}
               onPress={goDetail} onAdd={addMovie} showCinematch myMovieIds={myMovieIds} endpoint="/movies/top-rated-cinematch" navigation={navigation} T={T} />
-            <Section emoji="◇" title="Hidden Gems" data={classics} loading={loadingClassics}
+            <Section emoji="🎞️" title="Klasikler" data={classics} loading={loadingClassics}
               onPress={goDetail} onAdd={addMovie} myMovieIds={myMovieIds} endpoint="/movies/classics" navigation={navigation} T={T} />
           </ScrollView>
         )}
@@ -650,11 +707,13 @@ function createStyles(T) {
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.22)' },
   dotActive: { width: 20, height: 8, borderRadius: 4, backgroundColor: T.red },
   section: { marginTop: 34 },
-  sectionHeader: { paddingHorizontal: 24, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sectionIcon: { width: 27, height: 27, borderRadius: 14, backgroundColor: T.glass, justifyContent: 'center', alignItems: 'center' },
-  sectionEmoji: { fontSize: 15 },
-  sectionTitle: { color: T.text, fontSize: 18, fontWeight: '900', letterSpacing: -0.6 },
+  sectionHeader: { paddingLeft: 18, paddingRight: 24, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  sectionHeaderLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionEmoji: { fontSize: 18, lineHeight: 22 },
+  sectionTitle: { flex: 1, minWidth: 0, color: T.text, fontSize: 18, lineHeight: 22, fontWeight: '900', letterSpacing: 0 },
+  sourceMovieButton: { flexShrink: 1, maxWidth: '48%', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 11, borderWidth: 1, borderColor: T.border, backgroundColor: T.glass },
+  sourceMovieButtonText: { color: T.gold, fontSize: 12, lineHeight: 15, fontWeight: '800' },
+  sectionViewAllButton: { flexShrink: 0 },
   sectionViewAll: { color: T.gold, fontSize: 14, fontWeight: '800' },
   card: { width: 122, marginRight: 16 },
   cardPosterWrap: { width: 122, height: 178, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: T.border, backgroundColor: T.bgSoft },
@@ -666,8 +725,8 @@ function createStyles(T) {
   addFab: { position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: T.red, justifyContent: 'center', alignItems: 'center', shadowColor: T.red, shadowOpacity: 0.32, shadowRadius: 12, elevation: 8 },
   addFabText: { color: T.text, fontSize: 20, lineHeight: 21, fontWeight: '700' },
   addDone: { backgroundColor: T.success, shadowColor: T.success },
-  moodSection: { marginTop: 34 },
-  moodList: { paddingHorizontal: 24, gap: 12 },
+  moodSection: { marginTop: 30 },
+  moodList: { paddingHorizontal: 18, gap: 10 },
   moodPill: { height: 42, paddingHorizontal: 17, borderRadius: 21, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   moodIcon: { fontSize: 16, fontWeight: '800' },
   moodText: { fontSize: 13, fontWeight: '800' },

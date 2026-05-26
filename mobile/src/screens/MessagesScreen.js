@@ -71,21 +71,28 @@ export default function MessagesScreen({ navigation }) {
     glassStrong: themeColors.glassStrong || themeColors.glass,
     border: themeColors.border,
     borderSoft: themeColors.borderSoft,
+    primary: themeColors.primary,
+    primarySoft: themeColors.primarySoft,
+    primarySofter: themeColors.primaryBorder || themeColors.primarySoft,
+    rowBg: isDark ? 'rgba(12,12,18,0.86)' : 'rgba(255,255,255,0.88)',
+    rowBgActive: isDark ? 'rgba(18,18,26,0.94)' : 'rgba(255,255,255,0.96)',
     red: themeColors.red,
     redSoft: themeColors.redSoft,
     text: themeColors.textPrimary,
     textSoft: themeColors.textSecondary,
     textMuted: themeColors.textMuted,
-  }), [themeColors]);
+  }), [themeColors, isDark]);
   styles = React.useMemo(() => createStyles(T), [T]);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
   const gradientColors = movieTheme?.backgroundImage
-    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
-    : (movieTheme?.gradient || (isDark
-        ? ['#050506', '#0B0B10', '#050506']
-        : ['#d7dce5', '#c8d0dc', '#b8c2d0']));
+    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.58)', 'rgba(5,5,6,0.9)']
+    : (movieTheme?.gradient
+        ? [movieTheme.gradient[0] + 'ee', movieTheme.gradient[1] + 'cc', movieTheme.gradient[2] || T.bg]
+        : isDark
+          ? ['rgba(5,5,6,0.10)', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.88)']
+          : ['#d7dce5', '#c8d0dc', '#b8c2d0']);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -137,7 +144,7 @@ export default function MessagesScreen({ navigation }) {
         data={conversations}
         keyExtractor={(item) => item.matchId}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
         renderItem={({ item }) => (
           <ConversationRow
             item={item}
@@ -162,7 +169,16 @@ export default function MessagesScreen({ navigation }) {
 }
 
 function ThemeShell({ children, backgroundImage, gradientColors }) {
-  const content = <LinearGradient colors={gradientColors} style={styles.shell}>{children}</LinearGradient>;
+  const content = (
+    <LinearGradient
+      colors={gradientColors}
+      style={styles.shell}
+      start={{ x: 0.3, y: 0 }}
+      end={{ x: 0.7, y: 1 }}
+    >
+      {children}
+    </LinearGradient>
+  );
   if (!backgroundImage) return <View style={styles.shell}>{content}</View>;
   return (
     <ImageBackground source={backgroundImage} style={styles.shell} resizeMode="cover">
@@ -233,8 +249,11 @@ function createStyles(T) {
   // Satır
   row: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13, gap: 14,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 14, paddingVertical: 13, gap: 14,
+    backgroundColor: T.rowBg,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: 14,
   },
   rowContent: { flex: 1 },
   rowTop: {
@@ -261,7 +280,7 @@ function createStyles(T) {
   },
   unreadBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  separator: { height: 0.5, backgroundColor: T.borderSoft, marginLeft: 82 },
+  separator: { height: 10 },
 
   // Boş durum
   emptyEmoji: { fontSize: 52, marginBottom: 14 },

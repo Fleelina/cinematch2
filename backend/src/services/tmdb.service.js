@@ -161,6 +161,7 @@ const getMovieDetail = async (tmdbId) => {
     tmdbId: movie.id,
     title: movie.title || movie.original_title,
     originalTitle: movie.original_title,
+    originalLanguage: movie.original_language || null,
     overview: movie.overview,
     poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
     backdrop: movie.backdrop_path ? `https://image.tmdb.org/t/p/w780${movie.backdrop_path}` : null,

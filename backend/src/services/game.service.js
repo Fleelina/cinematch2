@@ -99,19 +99,53 @@ function isCloseGuess(guess, title) {
   return distance <= Math.max(1, Math.floor(normalizedTitle.length * 0.18));
 }
 
-function buildMovieGuessRound(movie, seed) {
-  const hints = [
-    movie.year ? `Bu film ${movie.year} yılında çıktı.` : 'Bu film modern dönemden popüler bir yapım.',
-    movie.rating ? `IMDb puanı yaklaşık ${movie.rating}.` : 'İzleyici puanı güçlü bir film.',
-    movie.overview ? `Konu ipucu: ${movie.overview.slice(0, 150)}...` : 'Konu ipucu şu an gizemini koruyor.',
-    movie.poster ? 'Son ipucu: poster artık açılabilir.' : 'Son ipucu: bu film geniş izleyici kitlesine ulaştı.',
-  ];
+function seededShuffle(items, seed) {
+  return [...items]
+    .map((item, index) => ({
+      item,
+      sort: hashString(`${seed}:${index}:${item}`),
+    }))
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ item }) => item);
+}
+
+function cleanOverview(overview) {
+  const text = String(overview || '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const sentence = text.split(/(?<=[.!?])\s+/)[0] || text;
+  return sentence.length > 130 ? `${sentence.slice(0, 130).trim()}...` : sentence;
+}
+
+function getLeadActor(movie) {
+  if (Array.isArray(movie.cast) && movie.cast.length > 0) return movie.cast[0]?.name || movie.cast[0];
+  if (typeof movie.cast === 'string') {
+    try {
+      const parsed = JSON.parse(movie.cast);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed[0]?.name || parsed[0];
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function buildMovieGuessRound(movie, seed, userRating = null) {
+  const overviewHint = cleanOverview(movie.overview);
+  const leadActor = getLeadActor(movie);
+  const hints = seededShuffle([
+    leadActor ? `Başrolde ${leadActor} var.` : null,
+    overviewHint ? `Konu izi: ${overviewHint}` : null,
+    movie.year ? `Çıkış yılı ${movie.year}.` : null,
+    movie.rating ? `IMDb puanı yaklaşık ${movie.rating}.` : null,
+    userRating ? `Sen bu filme ${userRating}/10 vermişsin.` : 'Sen bu filme henüz puan vermemişsin.',
+  ].filter(Boolean), `${seed}:movie-guess-hints`);
 
   return {
     roundId: `${movie.tmdbId}:${seed}`,
     maxHints: hints.length,
     visibleHints: 1,
     hints: hints.slice(0, 1),
+    allHints: hints,
     posterHintAvailableAt: hints.length,
     movie: {
       tmdbId: movie.tmdbId,
@@ -361,24 +395,37 @@ const startMovieGuess = async (userId) => {
 
   const index = hashString(`${userId}:${Date.now()}`) % movies.length;
   const movie = movies[index];
-  const detail = await tmdbService.getMovieDetail(movie.tmdbId).catch(() => movie);
+  const [detail, ratingRecord] = await Promise.all([
+    tmdbService.getMovieDetail(movie.tmdbId).catch(() => movie),
+    prisma.movieRating.findFirst({
+      where: {
+        userId,
+        movie: { tmdbId: movie.tmdbId },
+      },
+      select: { rating: true },
+    }).catch(() => null),
+  ]);
+  const round = buildMovieGuessRound({ ...movie, ...detail }, Date.now(), ratingRecord?.rating || null);
+  const { allHints, ...payload } = round;
 
   return {
-    ...buildMovieGuessRound({ ...movie, ...detail }, Date.now()),
+    ...payload,
     source,
   };
 };
 
-async function pickPosterGuessMovie(userId) {
+async function pickPosterGuessMovie(userId, requestedSource = 'user_movies') {
   const userMovies = await prisma.userMovie.findMany({
     where: { userId },
     include: { movie: true },
   });
 
-  let movies = userMovies
+  let movies = requestedSource === 'trending'
+    ? []
+    : userMovies
     .map((item) => item.movie)
     .filter((movie) => movie?.tmdbId && movie?.poster);
-  let source = 'user_movies';
+  let source = requestedSource === 'trending' ? 'trending' : 'user_movies';
 
   if (movies.length === 0) {
     const page = (hashString(`${userId}:${getTodayKey()}:poster`) % 5) + 1;
@@ -399,8 +446,8 @@ async function pickPosterGuessMovie(userId) {
   };
 }
 
-const startPosterGuess = async (userId) => {
-  const { movie, source } = await pickPosterGuessMovie(userId);
+const startPosterGuess = async (userId, requestedSource = 'user_movies') => {
+  const { movie, source } = await pickPosterGuessMovie(userId, requestedSource);
   return buildPosterGuessRound(movie, Date.now(), 0, source);
 };
 
@@ -439,24 +486,57 @@ const submitPosterGuess = async ({ roundId, guess, stageIndex = 0, wrongGuesses 
   };
 };
 
-const revealMovieGuessHint = async (roundId, visibleHints = 1) => {
+const revealMovieGuessHint = async (roundId, visibleHints = 1, userId = null) => {
   const [tmdbId] = String(roundId || '').split(':');
   if (!tmdbId) throw new ApiError(400, 'Round bilgisi gecersiz');
 
-  const movie = await tmdbService.getMovieDetail(tmdbId);
-  const round = buildMovieGuessRound(movie, String(roundId).split(':')[1] || 'manual');
+  const [movie, ratingRecord] = await Promise.all([
+    tmdbService.getMovieDetail(tmdbId),
+    userId
+      ? prisma.movieRating.findFirst({
+          where: {
+            userId,
+            movie: { tmdbId: parseInt(tmdbId, 10) },
+          },
+          select: { rating: true },
+        }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+  const round = buildMovieGuessRound(movie, String(roundId).split(':')[1] || 'manual', ratingRecord?.rating || null);
   const nextVisibleHints = Math.max(1, Math.min(round.maxHints, parseInt(visibleHints, 10) + 1));
+  const { allHints, ...payload } = round;
 
   return {
-    ...round,
+    ...payload,
     visibleHints: nextVisibleHints,
-    hints: [
-      movie.year ? `Bu film ${movie.year} yılında çıktı.` : 'Bu film modern dönemden popüler bir yapım.',
-      movie.rating ? `IMDb puanı yaklaşık ${movie.rating}.` : 'İzleyici puanı güçlü bir film.',
-      movie.overview ? `Konu ipucu: ${movie.overview.slice(0, 150)}...` : 'Konu ipucu şu an gizemini koruyor.',
-      movie.poster ? 'Son ipucu: poster artık açılabilir.' : 'Son ipucu: bu film geniş izleyici kitlesine ulaştı.',
-    ].slice(0, nextVisibleHints),
+    hints: allHints.slice(0, nextVisibleHints),
     poster: nextVisibleHints >= round.maxHints ? movie.poster : null,
+  };
+};
+
+const revealPosterGuessStage = async ({ roundId, stageIndex = 0, source = 'user_movies' }) => {
+  const [tmdbId, seed = 'manual'] = String(roundId || '').split(':');
+  if (!tmdbId) throw new ApiError(400, 'Round bilgisi gecersiz');
+
+  const movie = await tmdbService.getMovieDetail(tmdbId);
+  const currentStage = Math.max(0, Math.min(POSTER_GUESS_STAGES.length - 1, parseInt(stageIndex, 10) || 0));
+  const nextStage = Math.min(POSTER_GUESS_STAGES.length - 1, currentStage + 1);
+  const revealed = nextStage >= POSTER_GUESS_STAGES.length - 1;
+
+  return {
+    correct: false,
+    revealed,
+    score: 0,
+    message: revealed ? 'Poster tamamen açıldı.' : 'Poster biraz daha netleşti.',
+    round: buildPosterGuessRound(movie, seed, nextStage, source),
+    answer: revealed ? {
+      tmdbId: movie.tmdbId,
+      title: movie.title,
+      poster: movie.poster,
+      year: movie.year,
+      rating: movie.rating,
+      overview: movie.overview,
+    } : null,
   };
 };
 
@@ -544,6 +624,7 @@ module.exports = {
   submitMovieGuess,
   startPosterGuess,
   submitPosterGuess,
+  revealPosterGuessStage,
   getDailyTaste,
   answerDailyTaste,
 };

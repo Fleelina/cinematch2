@@ -13,6 +13,38 @@ function shuffle(items) {
   return arr;
 }
 
+function hashString(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function mapTmdbMovie(movie) {
+  const title = movie.original_language === 'tr'
+    ? (movie.original_title || movie.title)
+    : (movie.title || movie.original_title);
+
+  return {
+    tmdbId: movie.id,
+    title,
+    overview: movie.overview,
+    poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+    backdrop: movie.backdrop_path ? `https://image.tmdb.org/t/p/w780${movie.backdrop_path}` : null,
+    year: movie.release_date?.slice(0, 4) || null,
+    rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
+  };
+}
+
+function getPreferredMovieTitle(detail, fallbackTitle) {
+  if (!detail) return fallbackTitle;
+  if (detail.originalLanguage === 'tr') {
+    return detail.originalTitle || detail.title || fallbackTitle;
+  }
+  return detail.title || detail.originalTitle || fallbackTitle;
+}
+
 // Oneri havuzlarindaki eleme nedenlerini loglar.
 // Debug odaklidir; sonuc setini degistirmez.
 function logSuggestionPool(label, movies, excludedIds, seenIds = new Set()) {
@@ -137,15 +169,57 @@ const getSuggestions = async (userId) => {
   const nullPosters = combined.filter(m => !m.poster_path).map(m => ({ id: m.id, title: m.title }));
   if (nullPosters.length > 0) console.log('[POSTER NULL]', nullPosters);
 
-  return shuffle(combined).map((movie) => ({
-    tmdbId: movie.id,
-    title: movie.original_title || movie.title,
-    overview: movie.overview,
-    poster: `https://image.tmdb.org/t/p/w500${movie.poster_path}`,
-    backdrop: movie.backdrop_path ? `https://image.tmdb.org/t/p/w780${movie.backdrop_path}` : null,
-    year: movie.release_date?.slice(0, 4) || null,
-    rating: movie.vote_average ? movie.vote_average.toFixed(1) : null,
-  }));
+  return shuffle(combined).map(mapTmdbMovie);
+};
+
+const getDailySimilarMovies = async (userId, slot = 0) => {
+  const [userMovies, watchlist] = await Promise.all([
+    prisma.userMovie.findMany({
+      where: { userId },
+      include: { movie: true },
+      orderBy: { movie: { title: 'asc' } },
+    }),
+    prisma.watchlist.findMany({ where: { userId }, select: { tmdbId: true } }),
+  ]);
+
+  if (userMovies.length === 0) {
+    return { sourceMovie: null, movies: [], hasMore: false };
+  }
+
+  const parsedSlot = parseInt(slot, 10);
+  const slotIndex = Number.isFinite(parsedSlot) ? Math.max(0, parsedSlot) : 0;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const baseSourceIndex = hashString(`${userId}:${todayKey}`) % userMovies.length;
+  const sourceIndex = (baseSourceIndex + slotIndex) % userMovies.length;
+  const sourceMovie = userMovies[sourceIndex].movie;
+  const sourceMovieDetail = await tmdbService.getMovieDetail(sourceMovie.tmdbId).catch(() => null);
+  const excludedIds = new Set([
+    ...userMovies.map((userMovie) => userMovie.movie.tmdbId),
+    ...watchlist.map((item) => item.tmdbId),
+  ]);
+  const page = (hashString(`${todayKey}:${sourceMovie.tmdbId}`) % 3) + 1;
+  const similar = await tmdbService.getSimilarMovies(sourceMovie.tmdbId, page);
+  const seen = new Set();
+
+  const movies = similar
+    .filter((movie) => {
+      if (!movie.poster_path || excludedIds.has(movie.id) || seen.has(movie.id)) return false;
+      seen.add(movie.id);
+      return true;
+    })
+    .slice(0, 15)
+    .map(mapTmdbMovie);
+
+  return {
+    sourceMovie: {
+      tmdbId: sourceMovie.tmdbId,
+      title: getPreferredMovieTitle(sourceMovieDetail, sourceMovie.title),
+      poster: sourceMovie.poster,
+      year: sourceMovie.year,
+    },
+    movies,
+    hasMore: false,
+  };
 };
 
 // Film detayini TMDB'den alir, kullaniciya ozel local state ile zenginlestirir.
@@ -325,7 +399,17 @@ const getMyMovies = async (userId) => {
     orderBy: { movie: { title: 'asc' } },
   });
 
-  return userMovies.map((userMovie) => userMovie.movie);
+  const movies = await Promise.all(
+    userMovies.map(async (userMovie) => {
+      const detail = await tmdbService.getMovieDetail(userMovie.movie.tmdbId).catch(() => null);
+      return {
+        ...userMovie.movie,
+        title: getPreferredMovieTitle(detail, userMovie.movie.title),
+      };
+    })
+  );
+
+  return movies.sort((a, b) => a.title.localeCompare(b.title));
 };
 
 // Arama dogrudan TMDB servisine delegedir.
@@ -415,6 +499,7 @@ module.exports = {
   searchMovies,
   translateText,
   getSuggestions,
+  getDailySimilarMovies,
   getMovieDetailWithUserData,
   rateMovie,
   addToProfile,

@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   Image, StyleSheet, ActivityIndicator, KeyboardAvoidingView,
-  Platform, Alert, ScrollView, Modal, Animated, ImageBackground,
+  Platform, Alert, ScrollView, Modal, Animated, ImageBackground, Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../services/api';
 import { getSocket, connectSocket, emitTyping, emitStopTyping } from '../services/socket';
@@ -12,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
+const ANDROID_KEYBOARD_EXTRA_OFFSET = 14;
 
 const DEFAULT_T = {
   bg: '#0f0f0f',
@@ -103,16 +105,21 @@ export default function ChatScreen({ route, navigation }) {
     bubbleMe: themeColors.red || '#ff3b55',
     bubbleThem: isDark ? (themeColors.bgSoft || '#202124') : 'rgba(255,255,255,0.72)',
     inputBg: isDark ? (themeColors.bgSoft || '#1a1a1a') : 'rgba(255,255,255,0.72)',
+    headerBg: isDark ? 'rgba(8,8,12,0.92)' : 'rgba(244,247,252,0.92)',
+    headerButtonBg: isDark ? 'rgba(255,255,255,0.085)' : 'rgba(33,45,62,0.075)',
+    headerBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(33,45,62,0.12)',
     shadow: isDark ? '#000' : 'rgba(33,45,62,0.28)',
     shadowOpacity: isDark ? 0.12 : 0.1,
   }), [themeColors, isDark]);
   styles = React.useMemo(() => createStyles(T), [T]);
   const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
   const gradientColors = movieTheme?.backgroundImage
-    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
-    : (movieTheme?.gradient || (isDark
-        ? ['#050506', '#0B0B10', '#050506']
-        : ['#d7dce5', '#c8d0dc', '#b8c2d0']));
+    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.58)', 'rgba(5,5,6,0.9)']
+    : (movieTheme?.gradient
+        ? [movieTheme.gradient[0] + 'ee', movieTheme.gradient[1] + 'cc', movieTheme.gradient[2] || T.bg]
+        : isDark
+          ? ['rgba(5,5,6,0.10)', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.88)']
+          : ['#d7dce5', '#c8d0dc', '#b8c2d0']);
 
   const [messages, setMessages] = useState([]);
   const [commonMovies, setCommonMovies] = useState([]);
@@ -125,6 +132,7 @@ export default function ChatScreen({ route, navigation }) {
   const [selectedMsgMenu, setSelectedMsgMenu] = useState(null); // { id, mine }
   const [chatOptionsVisible, setChatOptionsVisible] = useState(false);
   const [likedMessages, setLikedMessages] = useState({});
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [heartAnim] = useState(new Animated.Value(0));
   const [heartPos] = useState({ x: 0, y: 0 });
   const [showHeart] = useState(false);
@@ -207,6 +215,22 @@ export default function ChatScreen({ route, navigation }) {
       emitStopTyping(matchId);
     };
   }, [fetchMessages, matchId, user.id]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+
+    const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardOffset(Math.max(event.endCoordinates.height + ANDROID_KEYBOARD_EXTRA_OFFSET, 0));
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardOffset(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleTextChange = (val) => {
     setText(val);
@@ -382,15 +406,16 @@ export default function ChatScreen({ route, navigation }) {
 
   return (
     <ThemeShell backgroundImage={backgroundImage} gradientColors={gradientColors}>
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={Platform.OS === 'ios'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : undefined}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) + 8 }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backBtnText}>{'\u2190'}</Text>
+            <Ionicons name="chevron-back" size={22} color={T.text} style={styles.backBtnIcon} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerUser}
@@ -407,7 +432,7 @@ export default function ChatScreen({ route, navigation }) {
             onPress={() => setChatOptionsVisible(true)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.headerMenuBtnText}>{'\u22EF'}</Text>
+            <Ionicons name="ellipsis-horizontal" size={22} color={T.text} />
           </TouchableOpacity>
         </View>
 
@@ -569,7 +594,15 @@ export default function ChatScreen({ route, navigation }) {
           </View>
         ) : null}
 
-        <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View
+          style={[
+            styles.inputRow,
+            {
+              paddingBottom: Math.max(insets.bottom, 12),
+              marginBottom: Platform.OS === 'android' ? keyboardOffset : 0,
+            },
+          ]}
+        >
           <TextInput
             style={styles.input}
             value={text}
@@ -584,7 +617,11 @@ export default function ChatScreen({ route, navigation }) {
             onPress={handleSend}
             disabled={!text.trim() || sending}
           >
-            <Text style={styles.sendBtnText}>{'\u2191'}</Text>
+            {sending ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="send" size={19} color="#fff" style={styles.sendBtnIcon} />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -718,7 +755,16 @@ export default function ChatScreen({ route, navigation }) {
 }
 
 function ThemeShell({ children, backgroundImage, gradientColors }) {
-  const content = <LinearGradient colors={gradientColors} style={styles.themeShell}>{children}</LinearGradient>;
+  const content = (
+    <LinearGradient
+      colors={gradientColors}
+      style={styles.themeShell}
+      start={{ x: 0.3, y: 0 }}
+      end={{ x: 0.7, y: 1 }}
+    >
+      {children}
+    </LinearGradient>
+  );
   if (!backgroundImage) return <View style={styles.themeShell}>{content}</View>;
   return (
     <ImageBackground source={backgroundImage} style={styles.themeShell} resizeMode="cover">
@@ -736,33 +782,48 @@ function createStyles(T) {
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: T.surface,
+    gap: 12,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
+    backgroundColor: T.headerBg,
     borderBottomWidth: 1,
-    borderBottomColor: T.borderSoft,
+    borderBottomColor: T.headerBorder,
   },
-  backBtn: { padding: 6, marginRight: 2 },
-  backBtnText: { color: T.text, fontSize: 24, fontWeight: '600' },
-  headerUser: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  headerName: { color: T.text, fontSize: 16, fontWeight: '700' },
-  typingHeader: { color: T.textMuted, fontSize: 11, marginTop: 1 },
-  headerMenuBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: T.glass,
+    backgroundColor: T.headerButtonBg,
     borderWidth: 1,
-    borderColor: T.border,
+    borderColor: T.headerBorder,
+    shadowColor: T.shadow,
+    shadowOpacity: T.shadowOpacity,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
-  headerMenuBtnText: {
-    color: T.text,
-    fontSize: 22,
-    lineHeight: 22,
-    marginTop: -3,
+  backBtnIcon: {
+    marginLeft: -2,
+  },
+  headerUser: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  headerName: { color: T.text, fontSize: 16, fontWeight: '800' },
+  typingHeader: { color: T.textMuted, fontSize: 11, marginTop: 1 },
+  headerMenuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.headerButtonBg,
+    borderWidth: 1,
+    borderColor: T.headerBorder,
+    shadowColor: T.shadow,
+    shadowOpacity: T.shadowOpacity,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   commonMoviesSection: {
     paddingTop: 10,
@@ -921,7 +982,7 @@ function createStyles(T) {
     color: T.textSoft,
     fontSize: 12,
   },
-  msgList: { paddingHorizontal: 12, paddingVertical: 16, gap: 4, flexGrow: 1 },
+  msgList: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 16, gap: 4, flexGrow: 1 },
   flatList: { flex: 1 },
   dateSeparator: { alignItems: 'center', marginVertical: 12 },
   dateSeparatorText: {
@@ -970,40 +1031,52 @@ function createStyles(T) {
     marginBottom: 8,
   },
   bubble: {
-    minWidth: 88,
+    minWidth: 64,
     maxWidth: '100%',
-    borderRadius: 20,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    shadowColor: T.shadow,
-    shadowOpacity: T.shadowOpacity,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
+    borderRadius: 22,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: T.glass,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
-  bubbleMe: { backgroundColor: T.bubbleMe, borderBottomRightRadius: 7 },
-  bubbleThem: { backgroundColor: T.bubbleThem, borderBottomLeftRadius: 7, borderWidth: 1, borderColor: T.border },
+  bubbleMe: {
+    backgroundColor: T.red,
+    borderBottomRightRadius: 8,
+    borderWidth: 0,
+  },
+  bubbleThem: {
+    backgroundColor: 'rgba(255,255,255,0.075)',
+    borderBottomLeftRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
+  },
   bubbleTemp: { opacity: 0.5 },
   attachmentCard: {
-    width: 238,
-    backgroundColor: T.surfaceSoft,
-    borderRadius: 20,
+    width: 270,
+    backgroundColor: 'rgba(255,255,255,0.075)',
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: T.border,
-    padding: 9,
-    gap: 8,
-    shadowColor: T.shadow,
-    shadowOpacity: T.shadowOpacity,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    borderColor: 'rgba(255,255,255,0.10)',
+    padding: 12,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
   },
   attachmentEyebrow: {
     color: T.red,
-    fontSize: 9,
-    fontWeight: '800',
+    fontSize: 10,
+    fontWeight: '900',
     textTransform: 'uppercase',
-    letterSpacing: 0.7,
+    letterSpacing: 1,
   },
   attachmentBody: {
     flexDirection: 'row',
@@ -1011,9 +1084,9 @@ function createStyles(T) {
     gap: 10,
   },
   attachmentPoster: {
-    width: 64,
-    height: 72,
-    borderRadius: 12,
+    width: 68,
+    height: 82,
+    borderRadius: 16,
     backgroundColor: T.bgSoft,
   },
   attachmentInfo: {
@@ -1028,20 +1101,20 @@ function createStyles(T) {
   attachmentTitle: {
     flex: 1,
     color: T.text,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 17,
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 21,
   },
   attachmentDetailBtn: {
-    minWidth: 68,
+    minWidth: 72,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: T.border,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    borderColor: 'rgba(255,255,255,0.12)',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: T.glass,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   attachmentDetailBtnText: {
     color: T.text,
@@ -1084,36 +1157,50 @@ function createStyles(T) {
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: T.borderSoft,
-    backgroundColor: T.surface,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(5,5,6,0.82)',
   },
   input: {
     flex: 1,
-    backgroundColor: T.inputBg,
+    backgroundColor: 'rgba(255,255,255,0.075)',
     color: T.text,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    borderRadius: 26,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     fontSize: 15,
     maxHeight: 120,
     borderWidth: 1,
-    borderColor: T.border,
+    borderColor: 'rgba(255,255,255,0.09)',
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: T.red,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 1,
+    shadowColor: T.red,
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
-  sendBtnDisabled: { backgroundColor: T.redSoft },
-  sendBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  sendBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  sendBtnIcon: {
+    marginLeft: 2,
+    marginTop: 1,
+  },
 
   // Kalp
   heartFloat: {

@@ -4,8 +4,9 @@ import * as DocumentPicker from 'expo-document-picker';
 import {
   View, Text, Image, ScrollView, StyleSheet,
   TouchableOpacity, ActivityIndicator, Pressable, Modal,
-  FlatList, Dimensions,
+  FlatList, Dimensions, ImageBackground,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +16,7 @@ import { normalizeImageUri } from '../services/imageUri';
 import { Radii } from '../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
 
 export default function ProfileScreen({ navigation }) {
   const { user, setUser } = useAuth();
@@ -30,6 +32,14 @@ export default function ProfileScreen({ navigation }) {
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
 
   const styles = createStyles(theme, isDark); // Dinamik stiller fırlatıldı
+  const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
+  const overlayColors = movieTheme?.backgroundImage
+    ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
+    : (movieTheme?.gradient
+        ? [movieTheme.gradient[0] + 'ee', movieTheme.gradient[1] + 'cc', movieTheme.gradient[2] || theme.bg]
+        : isDark
+          ? ['rgba(5,5,6,0.10)', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.88)']
+          : ['#d7dce5', '#c8d0dc', '#b8c2d0']);
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -75,9 +85,9 @@ export default function ProfileScreen({ navigation }) {
     } finally { setImporting(false); }
   };
 
-  return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-      {isDark && <><View style={styles.glowRed} /><View style={styles.glowPurple} /></>}
+  const content = (
+    <LinearGradient colors={overlayColors} style={styles.container}>
+    <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
 
       <View style={styles.appBar}>
         <View style={styles.appBarLeft}>
@@ -227,6 +237,15 @@ export default function ProfileScreen({ navigation }) {
         onClose={() => setAvatarModalVisible(false)}
       />
     </ScrollView>
+    </LinearGradient>
+  );
+
+  return backgroundImage ? (
+    <ImageBackground source={backgroundImage} style={styles.container} resizeMode="cover">
+      {content}
+    </ImageBackground>
+  ) : (
+    content
   );
 }
 
@@ -368,8 +387,7 @@ const stylesStatic = StyleSheet.create({
 // ARTIK STİLLER DİNAMİK OLARAK DETECT EDİLİYOR
 const createStyles = (theme, isDark) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  glowRed: { position: 'absolute', top: -80, left: -80, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,59,85,0.15)' },
-  glowPurple: { position: 'absolute', top: 160, right: -100, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(155,92,255,0.1)' },
+  scroll: { flex: 1 },
   appBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 58, paddingBottom: 12 },
   appBarLeft: { flexDirection: 'row', alignItems: 'center' },
   appBarUsername: { fontSize: 20, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.5 },
