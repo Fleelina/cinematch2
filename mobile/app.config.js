@@ -1,5 +1,14 @@
 import 'dotenv/config';
 
+const isProd = process.env.APP_ENV === 'production';
+const apiUrl = process.env.API_URL;
+
+if (isProd && !apiUrl) {
+  throw new Error(
+    '[app.config.js] Prod build\'te API_URL zorunludur. .env dosyasını veya EAS secret\'i kontrol et.'
+  );
+}
+
 export default {
   expo: {
     name: "CineMatch",
@@ -29,7 +38,7 @@ export default {
     },
     plugins: ["@react-native-community/datetimepicker"],
     extra: {
-      apiUrl: process.env.API_URL ?? 'http://localhost:3000',
+      apiUrl: apiUrl ?? 'http://localhost:3000',
     }
   }
 };
