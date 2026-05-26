@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const Sentry = require('@sentry/node');
+const helmet = require('helmet');
 
 const config = require('./config');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -41,6 +42,8 @@ const corsOptions = {
 const { publicAvatarUploadLimiter } = require('./middleware/rateLimiters');
 
 // Middleware
+app.use(helmet());
+app.disable('x-powered-by');
 app.use(cors(corsOptions));
 app.use('/api', globalApiLimiter);
 // Upload rate limit — body parse'tan ÖNCE çalışmalı; büyük istekler parse edilmeden reddedilir.
