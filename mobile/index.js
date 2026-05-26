@@ -1,12 +1,16 @@
 import { registerRootComponent } from 'expo';
 import { enableFreeze, enableScreens } from 'react-native-screens';
+import * as Sentry from '@sentry/react-native';
 
 import App from './App';
+
+Sentry.init({
+  dsn: 'https://b95dd8161658a7686c359154ffe4ceec@o4511457706704896.ingest.de.sentry.io/4511457799110736',
+  enabled: !__DEV__,
+  tracesSampleRate: 0.2,
+});
 
 enableScreens(true);
 enableFreeze(true);
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+registerRootComponent(Sentry.wrap(App));

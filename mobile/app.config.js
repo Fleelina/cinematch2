@@ -36,7 +36,10 @@ export default {
     web: {
       favicon: "./assets/favicon.png"
     },
-    plugins: ["@react-native-community/datetimepicker"],
+    plugins: [
+      "@react-native-community/datetimepicker",
+      ["@sentry/react-native/expo", { organization: "cinematch", project: "react-native" }]
+    ],
     extra: {
       apiUrl: apiUrl ?? 'http://localhost:3000',
     }
