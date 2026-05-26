@@ -1,3 +1,5 @@
+const Sentry = require('@sentry/node');
+
 // Uygulama seviyesinde kontrollu hata firlatmak icin kullanilan custom error.
 class ApiError extends Error {
   constructor(statusCode, message) {
@@ -8,6 +10,17 @@ class ApiError extends Error {
 
 // Express hata middleware'i; bilinen hata tiplerini tutarli response'a cevirir.
 const errorHandler = (err, req, res, next) => {
+  // 4xx hatalar beklenen hatalar — Sentry'ye gonderme
+  const isExpected =
+    err instanceof ApiError ||
+    err.name === 'MulterError' ||
+    err.name === 'JsonWebTokenError' ||
+    err.name === 'TokenExpiredError';
+
+  if (!isExpected) {
+    Sentry.captureException(err);
+  }
+
   console.error(err);
 
   if (err instanceof ApiError) {

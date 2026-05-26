@@ -1,9 +1,18 @@
 const express = require('express');
 const cors = require('cors');
+const Sentry = require('@sentry/node');
 
 const config = require('./config');
 const { errorHandler } = require('./middleware/errorHandler');
 const { globalApiLimiter } = require('./middleware/rateLimiters');
+
+// Sentry — uygulama baslamadan once init edilmeli
+Sentry.init({
+  dsn: config.sentryDsn,
+  enabled: !!config.sentryDsn,
+  environment: config.nodeEnv,
+  tracesSampleRate: 0.2,
+});
 
 // Routes
 const authRoutes = require('./routes/auth.routes');

@@ -24,6 +24,7 @@ const config = {
 
   // Harici servis konfigurasyonlari.
   tmdbApiKey: process.env.TMDB_API_KEY,
+  sentryDsn: process.env.SENTRY_DSN || null,
   r2: {
     accountId: process.env.R2_ACCOUNT_ID,
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
