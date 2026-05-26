@@ -60,7 +60,7 @@ const deleteAccount = asyncHandler(async (req, res) => {
   const { password } = req.body;
   if (!password) throw new (require('../middleware/errorHandler').ApiError)(400, 'Sifre gerekli');
 
-  const bcrypt = require('bcryptjs');
+  const bcrypt = require('bcrypt');
   const prisma = require('../prisma');
   const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { password: true } });
   const valid = await bcrypt.compare(password, user.password);
