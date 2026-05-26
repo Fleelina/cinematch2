@@ -38,9 +38,13 @@ const corsOptions = {
   },
 };
 
+const { publicAvatarUploadLimiter } = require('./middleware/rateLimiters');
+
 // Middleware
 app.use(cors(corsOptions));
 app.use('/api', globalApiLimiter);
+// Upload rate limit — body parse'tan ÖNCE çalışmalı; büyük istekler parse edilmeden reddedilir.
+app.use('/api/upload/avatar/public', publicAvatarUploadLimiter);
 // Genel JSON limiti — DoS koruması icin dusuk tutulur.
 // Upload endpoint'i kendi 10mb limitini ayri olarak tanimlar.
 app.use((req, res, next) => {
