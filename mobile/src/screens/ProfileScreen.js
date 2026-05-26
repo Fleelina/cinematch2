@@ -4,7 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import {
   View, Text, Image, ScrollView, StyleSheet,
   TouchableOpacity, ActivityIndicator, Pressable, Modal,
-  FlatList, Dimensions, ImageBackground,
+  FlatList, Dimensions, ImageBackground, TextInput, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -19,7 +19,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DEFAULT_BACKGROUND = require('../../assets/default-bg.png');
 
 export default function ProfileScreen({ navigation }) {
-  const { user, setUser } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const { theme, isDark, movieTheme } = useTheme();
   const [themePickerVisible, setThemePickerVisible] = useState(false);
   const [stats, setStats] = useState(null);
@@ -31,7 +31,24 @@ export default function ProfileScreen({ navigation }) {
   const [showUnmatched, setShowUnmatched] = useState(false);
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
 
-  const styles = createStyles(theme, isDark); // Dinamik stiller fırlatıldı
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) { setDeleteError('Şifrenizi girin'); return; }
+    setDeleteLoading(true); setDeleteError('');
+    try {
+      await api.delete('/users/me', { data: { password: deletePassword } });
+      setDeleteModalVisible(false);
+      logout();
+    } catch (err) {
+      setDeleteError(err.response?.data?.error || 'Bir hata oluştu');
+    } finally { setDeleteLoading(false); }
+  };
+
+  const styles = createStyles(theme, isDark); // Dinamik stiller
   const backgroundImage = isDark ? (movieTheme?.backgroundImage || DEFAULT_BACKGROUND) : null;
   const overlayColors = movieTheme?.backgroundImage
     ? ['rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.92)']
@@ -203,6 +220,16 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.listItemValue}>{stats.watchStyle.label}</Text>
               </View>
             ) : null}
+
+            <TouchableOpacity style={styles.listItem} onPress={() => { setDeleteError(''); setDeletePassword(''); setDeleteModalVisible(true); }}>
+              <View style={styles.listItemLeft}>
+                <View style={[styles.listIconWrap, { backgroundColor: theme.redSoft, borderColor: theme.red }]}>
+                  <Feather name="trash-2" size={16} color={theme.red} />
+                </View>
+                <Text style={[styles.listItemText, { color: theme.red }]}>Hesabı Sil</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.red} />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.divider} />
@@ -236,6 +263,42 @@ export default function ProfileScreen({ navigation }) {
         theme={theme}
         onClose={() => setAvatarModalVisible(false)}
       />
+
+      {/* Hesap Silme Modal */}
+      <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
+        <Pressable style={stylesStatic.modalBackdrop} onPress={() => setDeleteModalVisible(false)} />
+        <View style={[stylesStatic.deleteModal, { backgroundColor: theme.bgSoft, borderColor: theme.border }]}>
+          <Text style={[stylesStatic.deleteTitle, { color: theme.textPrimary }]}>Hesabı Sil</Text>
+          <Text style={[stylesStatic.deleteSub, { color: theme.textSecondary }]}>
+            Tüm verileriniz kalıcı olarak silinecek. Devam etmek için şifrenizi girin.
+          </Text>
+          <TextInput
+            style={[stylesStatic.deleteInput, { backgroundColor: theme.glass, borderColor: theme.border, color: theme.textPrimary }]}
+            placeholder="Şifreniz"
+            placeholderTextColor={theme.textMuted}
+            secureTextEntry
+            value={deletePassword}
+            onChangeText={setDeletePassword}
+            autoFocus
+          />
+          {deleteError ? <Text style={stylesStatic.deleteError}>{deleteError}</Text> : null}
+          <View style={stylesStatic.deleteActions}>
+            <TouchableOpacity style={[stylesStatic.deleteBtn, { backgroundColor: theme.glass, borderColor: theme.border }]} onPress={() => setDeleteModalVisible(false)}>
+              <Text style={[stylesStatic.deleteBtnText, { color: theme.textPrimary }]}>Vazgeç</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[stylesStatic.deleteBtn, { backgroundColor: theme.red, borderColor: theme.red, opacity: deleteLoading ? 0.6 : 1 }]}
+              onPress={handleDeleteAccount}
+              disabled={deleteLoading}
+            >
+              {deleteLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={[stylesStatic.deleteBtnText, { color: '#fff' }]}>Sil</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
     </LinearGradient>
   );
@@ -335,6 +398,33 @@ function getProfilePhotos(user) {
 }
 
 const stylesStatic = StyleSheet.create({
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  deleteModal: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderWidth: 0.5,
+    padding: 28,
+    paddingBottom: 48,
+    gap: 12,
+  },
+  deleteTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
+  deleteSub: { fontSize: 14, lineHeight: 20 },
+  deleteInput: {
+    borderRadius: 12, borderWidth: 1,
+    paddingHorizontal: 14, paddingVertical: 13,
+    fontSize: 15, marginTop: 4,
+  },
+  deleteError: { color: '#ff3b55', fontSize: 13 },
+  deleteActions: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  deleteBtn: {
+    flex: 1, height: 46, borderRadius: 14, borderWidth: 1,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  deleteBtnText: { fontSize: 15, fontWeight: '700' },
   avatarModalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.82)',

@@ -55,7 +55,23 @@ const getUserStats = asyncHandler(async (req, res) => {
   ok(res, stats);
 });
 
+const deleteAccount = asyncHandler(async (req, res) => {
+  // Kullanici silinmeden once sifre ile kimlik dogrulamasi yapilir
+  const { password } = req.body;
+  if (!password) throw new (require('../middleware/errorHandler').ApiError)(400, 'Sifre gerekli');
+
+  const bcrypt = require('bcryptjs');
+  const prisma = require('../prisma');
+  const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { password: true } });
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) throw new (require('../middleware/errorHandler').ApiError)(401, 'Sifre yanlis');
+
+  await userService.deleteAccount(req.user.userId);
+  ok(res, { message: 'Hesabiniz basariyla silindi' });
+});
+
 module.exports = {
   getProfile, updateProfile, checkUsername, savePushToken,
   discoverUsers, getProfileStats, getBlockedUsers, getUserProfile, getUserStats,
+  deleteAccount,
 };

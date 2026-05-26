@@ -14,6 +14,7 @@ router.put('/profile', authMiddleware, validate(userValidator.updateProfile), us
 router.get('/profile/stats', authMiddleware, userController.getProfileStats);
 router.get('/profile/blocked', authMiddleware, userController.getBlockedUsers);
 router.post('/push-token', authMiddleware, validate(userValidator.savePushToken), userController.savePushToken);
+router.delete('/me', authMiddleware, userController.deleteAccount);
 router.get('/discover', authMiddleware, userController.discoverUsers);
 
 // Public user profil/stat sorgulari path'teki `userId` ile hedeflenir.

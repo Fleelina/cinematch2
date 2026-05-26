@@ -372,6 +372,27 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
   return stripPassword(updated);
 };
 
+// Hesap silme — R2'deki avatarlar temizlenir, sonra kullanici DB'den cascade ile kaldirilir.
+const deleteAccount = async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { avatar: true, avatarType: true, profilePhotos: true },
+  });
+
+  // R2'deki upload dosyalarini best-effort olarak sil
+  if (user) {
+    const toDelete = [
+      ...(user.avatarType === 'upload' || user.avatarType === 'photo' ? [user.avatar] : []),
+      ...(user.profilePhotos || []),
+    ].filter(Boolean);
+
+    await Promise.allSettled(toDelete.map((url) => deleteFromR2(url)));
+  }
+
+  // Cascade ile tum iliskili kayitlar otomatik silinir
+  await prisma.user.delete({ where: { id: userId } });
+};
+
 // Public profil endpoint'i icin 404 davranisini merkezilesir.
 const fetchPublicProfile = async (userId) => {
   const user = await getPublicProfile(userId);
@@ -394,4 +415,5 @@ module.exports = {
   getBlockedUsers,
   getPublicProfile,
   getPublicStats,
+  deleteAccount,
 };
