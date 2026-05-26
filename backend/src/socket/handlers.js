@@ -1,6 +1,19 @@
 const { getPrisma } = require('../config/database');
 const messageService = require('../services/message.service');
 
+// Kullanicinin verilen match'e uye olup olmadigini dogrular.
+async function assertMatchMember(userId, matchId) {
+  const prisma = getPrisma();
+  const match = await prisma.match.findFirst({
+    where: {
+      id: matchId,
+      OR: [{ user1Id: userId }, { user2Id: userId }],
+    },
+    select: { id: true },
+  });
+  if (!match) throw new Error(`Yetkisiz erisim: user=${userId} match=${matchId}`);
+}
+
 // Socket baglantisi acildiginda tum event binding'lerini merkezilesir.
 function setupSocketHandlers(io) {
   io.on('connection', (socket) => {
@@ -33,9 +46,15 @@ async function loadUserRooms(userId, socket) {
   }
 }
 
-// Istek uzerine tekil match odasina manuel katilim saglar.
-function handleJoinRoom({ matchId }, socket) {
-  socket.join(`match:${matchId}`);
+// Istek uzerine tekil match odasina manuel katilim — uyelik dogrulanir.
+async function handleJoinRoom({ matchId }, socket) {
+  try {
+    await assertMatchMember(socket.userId, matchId);
+    socket.join(`match:${matchId}`);
+  } catch (err) {
+    console.warn('join_room reddedildi:', err.message);
+    socket.emit('room_error', { error: 'Bu odaya katilma yetkiniz yok' });
+  }
 }
 
 // Mesaji service katmaninda olusturur ve ilgili room'a broadcast eder.
@@ -51,14 +70,24 @@ async function handleSendMessage({ matchId, text, movieId }, socket, io) {
   }
 }
 
-// Typing eventi sadece diger oda uyelerine iletilir.
-function handleTyping({ matchId }, socket) {
-  socket.to(`match:${matchId}`).emit('user_typing', { userId: socket.userId });
+// Typing eventi — uyelik dogrulanir, sadece diger oda uyelerine iletilir.
+async function handleTyping({ matchId }, socket) {
+  try {
+    await assertMatchMember(socket.userId, matchId);
+    socket.to(`match:${matchId}`).emit('user_typing', { userId: socket.userId });
+  } catch (err) {
+    console.warn('typing reddedildi:', err.message);
+  }
 }
 
-// Typing durumunun bittigi bilgisi yine sadece diger uyelere gider.
-function handleStopTyping({ matchId }, socket) {
-  socket.to(`match:${matchId}`).emit('user_stop_typing', { userId: socket.userId });
+// Typing durumunun bittigi bilgisi — uyelik dogrulanir, sadece diger uyelere gider.
+async function handleStopTyping({ matchId }, socket) {
+  try {
+    await assertMatchMember(socket.userId, matchId);
+    socket.to(`match:${matchId}`).emit('user_stop_typing', { userId: socket.userId });
+  } catch (err) {
+    console.warn('stop_typing reddedildi:', err.message);
+  }
 }
 
 // Disconnect su an sadece log seviyesinde izlenir.
