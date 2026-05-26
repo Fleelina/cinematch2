@@ -17,8 +17,17 @@ const gameRoutes = require('./routes/game.routes');
 
 const app = express();
 
+const corsOptions = {
+  origin(origin, callback) {
+    if (config.nodeEnv !== 'production') return callback(null, true);
+    if (!origin) return callback(null, true);
+    if (config.corsOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS origin reddedildi'));
+  },
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 // Genel JSON limiti — DoS koruması icin dusuk tutulur.
 // Upload endpoint'i kendi 10mb limitini ayri olarak tanimlar.
 app.use((req, res, next) => {

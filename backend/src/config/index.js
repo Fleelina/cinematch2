@@ -1,10 +1,17 @@
 require('dotenv').config();
 
+const parseOrigins = (value) =>
+  (value || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
 // Environment degiskenlerini uygulama ici tek config nesnesine toplar.
 const config = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET,
+  corsOrigins: parseOrigins(process.env.CORS_ORIGINS),
 
   // Harici servis konfigurasyonlari.
   tmdbApiKey: process.env.TMDB_API_KEY,
@@ -29,5 +36,8 @@ const config = {
 // Kritik env alanlari boot aninda dogrulanir.
 if (!config.jwtSecret) throw new Error('JWT_SECRET gerekli');
 if (!config.tmdbApiKey) throw new Error('TMDB_API_KEY gerekli');
+if (config.nodeEnv === 'production' && config.corsOrigins.length === 0) {
+  throw new Error('Production icin CORS_ORIGINS gerekli');
+}
 
 module.exports = config;

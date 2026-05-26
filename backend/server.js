@@ -13,7 +13,15 @@ const prisma = getPrisma();
 // HTTP + Socket.io server
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: {
+    origin(origin, callback) {
+      if (config.nodeEnv !== 'production') return callback(null, true);
+      if (!origin) return callback(null, true);
+      if (config.corsOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Socket origin reddedildi'));
+    },
+    methods: ['GET', 'POST'],
+  },
   maxHttpBufferSize: 1e6,
 });
 
