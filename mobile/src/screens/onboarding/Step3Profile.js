@@ -11,6 +11,8 @@ import { useOnboarding } from '../../context/OnboardingContext';
 const GENDERS = [
   { key: 'male', label: 'Erkek', emoji: '👨' },
   { key: 'female', label: 'Kadın', emoji: '👩' },
+  { key: 'other', label: 'Diğer', emoji: '•' },
+  { key: 'prefer_not_to_say', label: 'Belirtmemeyi tercih ederim', emoji: '-' },
 ];
 
 function calcAge(date) {
@@ -139,15 +141,15 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: Colors.textMuted, marginBottom: 32 },
   sectionLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: Colors.textMuted, marginBottom: 12 },
 
-  genderRow: { flexDirection: 'row', gap: 12, marginBottom: 32 },
+  genderRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 32 },
   genderCard: {
-    flex: 1, alignItems: 'center', paddingVertical: 24, borderRadius: Radii.lg,
+    width: '47%', minHeight: 118, alignItems: 'center', justifyContent: 'center', paddingVertical: 18, paddingHorizontal: 8, borderRadius: Radii.lg,
     backgroundColor: Colors.bgCard, borderWidth: 1.5, borderColor: Colors.border,
     position: 'relative',
   },
   genderCardActive: { borderColor: Colors.red, backgroundColor: Colors.redDim },
   genderEmoji: { fontSize: 36, marginBottom: 10 },
-  genderLabel: { fontSize: 15, fontWeight: '700', color: Colors.textSecondary },
+  genderLabel: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary, textAlign: 'center' },
   genderLabelActive: { color: Colors.textPrimary },
   genderCheck: {
     position: 'absolute', top: 10, right: 10,

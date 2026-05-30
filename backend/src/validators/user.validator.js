@@ -7,15 +7,15 @@ const updateProfile = z.object({
     username: z.string().min(3, 'Kullanici adi en az 3 karakter olmali').optional().nullable(),
     bio: z.string().optional().nullable(),
     avatar: z.string().optional().nullable(),
-    avatarType: z.string().optional().nullable(),
+    avatarType: z.enum(['upload', 'photo', 'character']).optional().nullable(),
     profilePhotos: z.array(z.string()).max(3).optional(),
-    age: z.union([z.number(), z.string(), z.null()]).optional(),
+    birthDate: z.coerce.date().optional().nullable(),
     showAge: z.preprocess((v) => {
       if (v === true || v === 'true' || v === 1) return true;
       if (v === false || v === 'false' || v === 0) return false;
       return v;
     }, z.boolean()).optional(),
-    gender: z.enum(['male', 'female']).nullable().optional(),
+    gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say', 'MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']).nullable().optional(),
   }),
 });
 

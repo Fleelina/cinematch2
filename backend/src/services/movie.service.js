@@ -344,9 +344,9 @@ const addToProfile = async (userId, { tmdbId, title, poster, year }) => {
   try {
     const detail = await tmdbService.getMovieDetail(tmdbIdInt);
     runtime = detail.runtime || null;
-    genres = detail.genres?.length ? JSON.stringify(detail.genres) : null;
+    genres = detail.genres?.length ? detail.genres : null;
     director = detail.director || null;
-    cast = detail.cast?.length ? JSON.stringify(detail.cast.map((c) => c.name)) : null;
+    cast = detail.cast?.length ? detail.cast.map((c) => c.name) : null;
   } catch (err) {
     console.warn('[addToProfile] TMDB detay çekilemedi, alanlar boş kaydedilecek:', err.message);
   }
@@ -423,15 +423,24 @@ const getWatchlist = (userId) =>
   prisma.watchlist.findMany({
     where: { userId },
     orderBy: { addedAt: 'desc' },
+    include: { movie: true },
   });
 
 // Ayni film ikinci kez eklenirse yeni kayit acilmaz.
-const addToWatchlist = (userId, { tmdbId, title, poster, year }) =>
-  prisma.watchlist.upsert({
-    where: { userId_tmdbId: { userId, tmdbId } },
-    update: {},
-    create: { userId, tmdbId, title, poster, year: year ? parseInt(year, 10) : null },
+const addToWatchlist = async (userId, { tmdbId, title, poster, year }) => {
+  const tmdbIdInt = parseInt(tmdbId, 10);
+  const movie = await prisma.movie.upsert({
+    where: { tmdbId: tmdbIdInt },
+    update: { title, poster, year: year ? parseInt(year, 10) : null },
+    create: { tmdbId: tmdbIdInt, title, poster, year: year ? parseInt(year, 10) : null },
   });
+
+  return prisma.watchlist.upsert({
+    where: { userId_tmdbId: { userId, tmdbId: tmdbIdInt } },
+    update: { movieId: movie.id },
+    create: { userId, movieId: movie.id, tmdbId: tmdbIdInt, title, poster, year: year ? parseInt(year, 10) : null },
+  });
+};
 
 // Sessiz silme davranisi icin deleteMany kullanilir.
 const removeFromWatchlist = (userId, tmdbId) =>

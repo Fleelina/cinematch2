@@ -1,5 +1,7 @@
+const bcrypt = require('bcrypt');
+const prisma = require('../prisma');
 const userService = require('../services/user.service');
-const { asyncHandler } = require('../middleware/errorHandler');
+const { ApiError, asyncHandler } = require('../middleware/errorHandler');
 const { ok } = require('../utils/response');
 
 const getProfile = asyncHandler(async (req, res) => {
@@ -9,9 +11,9 @@ const getProfile = asyncHandler(async (req, res) => {
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
-  const { name, username, bio, avatar, avatarType, profilePhotos, age, showAge } = req.validated.body;
+  const { name, username, bio, avatar, avatarType, profilePhotos, birthDate, showAge, gender } = req.validated.body;
   // Güncelleme alanları controller'da açıkça seçilerek istemciden gelen gereksiz veri içeri alınmaz.
-  const updated = await userService.updateProfile(req.user.userId, { name, username, bio, avatar, avatarType, profilePhotos, age, showAge });
+  const updated = await userService.updateProfile(req.user.userId, { name, username, bio, avatar, avatarType, profilePhotos, birthDate, showAge, gender });
   ok(res, updated);
 });
 
@@ -58,13 +60,11 @@ const getUserStats = asyncHandler(async (req, res) => {
 const deleteAccount = asyncHandler(async (req, res) => {
   // Kullanici silinmeden once sifre ile kimlik dogrulamasi yapilir
   const { password } = req.body;
-  if (!password) throw new (require('../middleware/errorHandler').ApiError)(400, 'Sifre gerekli');
+  if (!password) throw new ApiError(400, 'Sifre gerekli');
 
-  const bcrypt = require('bcrypt');
-  const prisma = require('../prisma');
   const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { password: true } });
   const valid = await bcrypt.compare(password, user.password);
-  if (!valid) throw new (require('../middleware/errorHandler').ApiError)(401, 'Sifre yanlis');
+  if (!valid) throw new ApiError(401, 'Sifre yanlis');
 
   await userService.deleteAccount(req.user.userId);
   ok(res, { message: 'Hesabiniz basariyla silindi' });

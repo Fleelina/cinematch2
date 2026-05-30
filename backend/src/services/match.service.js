@@ -1,4 +1,5 @@
 const prisma = require('../prisma');
+const { InteractionType } = require('@prisma/client');
 const { sendPushNotification } = require('./notification.service');
 const { ApiError } = require('../middleware/errorHandler');
 
@@ -11,7 +12,7 @@ const upsertInteraction = (fromUserId, toUserId, type, db = prisma) =>
 
 const findMutualLike = (fromUserId, toUserId) =>
   prisma.interaction.findFirst({
-    where: { fromUserId: toUserId, toUserId: fromUserId, type: 'LIKE' },
+    where: { fromUserId: toUserId, toUserId: fromUserId, type: InteractionType.LIKE },
   });
 
 const normalizeMatchIds = (id1, id2) =>
@@ -100,7 +101,7 @@ const getUsersForNotification = (id1, id2) =>
 const getBlockedUserIdsForUser = async (userId) => {
   const blockedInteractions = await prisma.interaction.findMany({
     where: {
-      type: 'BLOCK',
+      type: InteractionType.BLOCK,
       OR: [{ fromUserId: userId }, { toUserId: userId }],
     },
     select: { fromUserId: true, toUserId: true },
@@ -156,7 +157,7 @@ const sendMatchNotifications = async (fromUserId, toUserId) => {
 };
 
 const likeUser = async (fromUserId, toUserId) => {
-  await upsertInteraction(fromUserId, toUserId, 'LIKE');
+  await upsertInteraction(fromUserId, toUserId, InteractionType.LIKE);
 
   const mutual = await findMutualLike(fromUserId, toUserId);
   if (!mutual) return { matched: false };
@@ -171,16 +172,12 @@ const likeUser = async (fromUserId, toUserId) => {
       });
 
       if (existingMatch) {
-        await upsertInteraction(fromUserId, toUserId, 'MATCHED', tx);
-        await upsertInteraction(toUserId, fromUserId, 'MATCHED', tx);
         return false;
       }
 
       const match = await tx.match.create({
         data: { user1Id, user2Id },
       });
-      await upsertInteraction(fromUserId, toUserId, 'MATCHED', tx);
-      await upsertInteraction(toUserId, fromUserId, 'MATCHED', tx);
       await createCommonMovieMessage(match, fromUserId, toUserId, tx);
       return true;
     });
@@ -205,7 +202,7 @@ const likeUser = async (fromUserId, toUserId) => {
 };
 
 const dislikeUser = (fromUserId, toUserId) =>
-  upsertInteraction(fromUserId, toUserId, 'DISLIKE');
+  upsertInteraction(fromUserId, toUserId, InteractionType.DISLIKE);
 
 const blockUser = async (userId, targetUserId) => {
   const existingMatch = await findMatch(userId, targetUserId);
@@ -215,7 +212,7 @@ const blockUser = async (userId, targetUserId) => {
       await tx.match.delete({ where: { id: existingMatch.id } });
     }
 
-    await upsertInteraction(userId, targetUserId, 'BLOCK', tx);
+    await upsertInteraction(userId, targetUserId, InteractionType.BLOCK, tx);
   });
 
   return { success: true };
@@ -236,12 +233,12 @@ const endMatch = async (userId, matchId) => {
     // bu yuzden burada dogrudan upsert yaziyoruz.
     await tx.interaction.upsert({
       where: { fromUserId_toUserId: { fromUserId: userId, toUserId: otherUserId } },
-      update: { type: 'DISLIKE', createdAt: now },
-      create: { fromUserId: userId, toUserId: otherUserId, type: 'DISLIKE', createdAt: now },
+      update: { type: InteractionType.DISLIKE, createdAt: now },
+      create: { fromUserId: userId, toUserId: otherUserId, type: InteractionType.DISLIKE, createdAt: now },
     });
 
     // Diger taraf LIKE olarak kalmaya devam eder — discover'da gorune bilir.
-    await upsertInteraction(otherUserId, userId, 'LIKE', tx);
+    await upsertInteraction(otherUserId, userId, InteractionType.LIKE, tx);
   });
 
   return { success: true };
@@ -260,22 +257,24 @@ const unblockUser = async (userId, targetUserId) => {
     where: {
       fromUserId: userId,
       toUserId: targetUserId,
-      type: 'BLOCK',
+      type: InteractionType.BLOCK,
     },
   });
 
   return { success: true };
 };
 
-// Swipe geri al: sadece LIKE veya DISLIKE silinir.
-// MATCHED veya BLOCK'a dokunulmaz — bunlar geri alinamaz islemler.
+// Swipe geri al: sadece eslesmeye donusmemis LIKE veya DISLIKE silinir.
+// BLOCK'a dokunulmaz; aktif match varsa once match akisi bitirilmelidir.
 const undoInteraction = async (userId, targetUserId) => {
   const interaction = await prisma.interaction.findUnique({
     where: { fromUserId_toUserId: { fromUserId: userId, toUserId: targetUserId } },
   });
 
   if (!interaction) return { undone: false, reason: 'not_found' };
-  if (!['LIKE', 'DISLIKE'].includes(interaction.type)) {
+  const existingMatch = await findMatch(userId, targetUserId);
+  if (existingMatch) return { undone: false, reason: 'matched' };
+  if (![InteractionType.LIKE, InteractionType.DISLIKE].includes(interaction.type)) {
     return { undone: false, reason: 'not_undoable' };
   }
 
@@ -294,7 +293,7 @@ const getExcludedUserIds = async (userId) => {
       select: { user1Id: true, user2Id: true },
     }),
     prisma.interaction.findMany({
-      where: { type: 'BLOCK', OR: [{ fromUserId: userId }, { toUserId: userId }] },
+      where: { type: InteractionType.BLOCK, OR: [{ fromUserId: userId }, { toUserId: userId }] },
       select: { fromUserId: true, toUserId: true },
     }),
   ]);
@@ -314,7 +313,7 @@ const getExcludedUserIds = async (userId) => {
 const getLikedMe = async (userId) => {
   const [interactions, excluded] = await Promise.all([
     prisma.interaction.findMany({
-      where: { toUserId: userId, type: 'LIKE' },
+      where: { toUserId: userId, type: InteractionType.LIKE },
       select: {
         fromUserId: true,
         createdAt: true,
@@ -333,7 +332,7 @@ const getLikedMe = async (userId) => {
 const getILiked = async (userId) => {
   const [interactions, excluded] = await Promise.all([
     prisma.interaction.findMany({
-      where: { fromUserId: userId, type: 'LIKE' },
+      where: { fromUserId: userId, type: InteractionType.LIKE },
       select: {
         toUserId: true,
         createdAt: true,

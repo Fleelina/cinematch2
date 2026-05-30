@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../prisma');
 const { ApiError } = require('../middleware/errorHandler');
 const { finalizeAvatar } = require('./upload.service');
+const { calculateAge, normalizeGender } = require('../utils/user.utils');
 
 const SALT_ROUNDS = 12;
 const TOKEN_EXPIRY = '7d';
@@ -24,8 +25,13 @@ const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
 };
 
-const createUserWithMovies = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, gender, movies }) => {
+const createUserWithMovies = async ({ name, email, password, username, bio, avatar, avatarType, birthDate, age, showAge, gender, movies }) => {
   const hashedPassword = await hashPassword(password);
+  const parsedBirthDate = birthDate ? new Date(birthDate) : null;
+  const derivedAge = parsedBirthDate ? calculateAge(parsedBirthDate) : (age ? parseInt(age) : null);
+  if (derivedAge !== null && (derivedAge < 13 || derivedAge > 100)) {
+    throw new ApiError(400, 'Gecersiz dogum tarihi');
+  }
 
   // Onboarding'den gelen filmler önce tekilleştirilir; var olan kayıtlar tekrar oluşturulmaz.
   const movieData = [];
@@ -64,9 +70,9 @@ const createUserWithMovies = async ({ name, email, password, username, bio, avat
       avatar: avatar || null,
       avatarType: avatarType || null,
       profilePhotos: avatar ? [avatar] : [],
-      age: age ? parseInt(age) : null,
+      birthDate: parsedBirthDate,
       showAge: showAge ?? false,
-      gender: gender || null,
+      gender: normalizeGender(gender),
       ...(movieData.length > 0 && {
         movies: { create: movieData },
       }),
@@ -82,12 +88,14 @@ const formatUserResponse = (user) => ({
   avatar: user.avatar,
   avatarType: user.avatarType,
   profilePhotos: user.profilePhotos || [],
-  age: user.age,
+  birthDate: user.birthDate,
+  age: calculateAge(user.birthDate),
   showAge: user.showAge,
+  gender: user.gender,
   bio: user.bio,
 });
 
-const register = async ({ name, email, password, username, bio, avatar, avatarType, age, showAge, gender, movies }) => {
+const register = async ({ name, email, password, username, bio, avatar, avatarType, birthDate, age, showAge, gender, movies }) => {
   // Önce benzersiz alanlar kontrol edilir; başarısız senaryoda gereksiz hash ve create maliyeti oluşmaz.
   const existingEmail = await findUserByEmail(email);
   if (existingEmail) throw new ApiError(409, 'Bu email zaten kayıtlı');
@@ -97,7 +105,7 @@ const register = async ({ name, email, password, username, bio, avatar, avatarTy
     if (existingUsername) throw new ApiError(409, 'Bu kullanıcı adı zaten alınmış');
   }
 
-  const user = await createUserWithMovies({ name, email, password, username, bio, avatar, avatarType, age, showAge, gender, movies });
+  const user = await createUserWithMovies({ name, email, password, username, bio, avatar, avatarType, birthDate, age, showAge, gender, movies });
   const token = generateToken(user.id);
 
   // Kayıt tamamlandıktan sonra geçici avatar kalıcı kullanıcı anahtarına taşınır.
@@ -129,9 +137,18 @@ const login = async ({ email, password }) => {
   return { token, user: formatUserResponse(user) };
 };
 
+const refresh = async (userId) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new ApiError(401, 'Kullanici bulunamadi');
+
+  const token = generateToken(user.id);
+  return { token, user: formatUserResponse(user) };
+};
+
 module.exports = {
   register,
   login,
+  refresh,
   findUserByEmail,
   findUserByUsername,
   hashPassword,

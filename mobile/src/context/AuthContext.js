@@ -17,6 +17,16 @@ export const AuthProvider = ({ children }) => {
         if (savedToken && savedUser) {
           setToken(savedToken);          // memory'e yükle → interceptor artık sync
           setUser(JSON.parse(savedUser));
+          try {
+            const res = await api.post('/auth/refresh');
+            const { token, user } = res.data;
+            await AsyncStorage.setItem('token', token);
+            await AsyncStorage.setItem('user', JSON.stringify(user));
+            setToken(token);
+            setUser(user);
+          } catch (refreshErr) {
+            console.error('[Auth] token refresh failed:', refreshErr.message);
+          }
         }
       } catch (err) {
         console.error(err);

@@ -14,4 +14,9 @@ const login = asyncHandler(async (req, res) => {
   ok(res, result);
 });
 
-module.exports = { register, login };
+const refresh = asyncHandler(async (req, res) => {
+  const result = await authService.refresh(req.user.userId);
+  ok(res, result);
+});
+
+module.exports = { register, login, refresh };

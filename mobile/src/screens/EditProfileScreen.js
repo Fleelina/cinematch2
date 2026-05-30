@@ -17,6 +17,13 @@ const ageToDate = (age) => {
   if (!age) return new Date();
   const d = new Date(); d.setFullYear(d.getFullYear() - parseInt(age)); return d;
 };
+const parseBirthDate = (value, fallbackAge) => {
+  if (value) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return ageToDate(fallbackAge);
+};
 const dateToAge = (date) => {
   const today = new Date(); let age = today.getFullYear() - date.getFullYear();
   const m = today.getMonth() - date.getMonth();
@@ -32,7 +39,7 @@ export default function EditProfileScreen({ navigation }) {
   const [bio, setBio] = useState(user?.bio || '');
   const [age, setAge] = useState(user?.age ? String(user.age) : '');
   const [showAge, setShowAge] = useState(user?.showAge || false);
-  const [birthDate, setBirthDate] = useState(ageToDate(user?.age));
+  const [birthDate, setBirthDate] = useState(parseBirthDate(user?.birthDate, user?.age));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [avatar, setAvatar] = useState(user?.avatar || null);
   const [avatarType, setAvatarType] = useState(user?.avatarType || null);
@@ -110,11 +117,11 @@ export default function EditProfileScreen({ navigation }) {
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Hata', 'Ad boş bırakılamaz'); return; }
     const computedAge = age ? parseInt(age) : null;
-    if (computedAge !== null && (computedAge < 18 || computedAge > 120)) { Alert.alert('Hata', 'Geçersiz yaş'); return; }
+    if (computedAge !== null && (computedAge < 13 || computedAge > 120)) { Alert.alert('Hata', 'Geçersiz yaş'); return; }
     setSaving(true);
     try {
       const compactPhotos = profilePhotos.filter(Boolean).slice(0, 3);
-      const res = await api.put('/users/profile', { name: name.trim(), username: username.trim() || null, bio: bio.trim() || null, avatar, avatarType, profilePhotos: compactPhotos, age: age ? parseInt(age) : null, showAge });
+      const res = await api.put('/users/profile', { name: name.trim(), username: username.trim() || null, bio: bio.trim() || null, avatar, avatarType, profilePhotos: compactPhotos, birthDate: age ? birthDate.toISOString() : null, showAge });
       const profileRes = await api.get('/users/profile');
       setUser((prev) => ({ ...prev, ...res.data, ...profileRes.data })); handleBack();
     } catch (err) { Alert.alert('Hata', err.response?.data?.error || 'Hata oluştu'); }
@@ -230,7 +237,7 @@ export default function EditProfileScreen({ navigation }) {
                 <Feather name="chevron-right" size={20} color={theme.textMuted} />
               </TouchableOpacity>
               {showDatePicker && (
-                <DateTimePicker value={birthDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 18))} minimumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 120))}
+                <DateTimePicker value={birthDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 13))} minimumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 120))}
                   onChange={(event, selectedDate) => {
                     if (Platform.OS === 'android') setShowDatePicker(false);
                     if (selectedDate) { setBirthDate(selectedDate); setAge(String(dateToAge(selectedDate))); }

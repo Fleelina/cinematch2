@@ -129,6 +129,15 @@ function getLeadActor(movie) {
   return null;
 }
 
+function parseMaybeJson(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 function buildMovieGuessRound(movie, seed, userRating = null) {
   const overviewHint = cleanOverview(movie.overview);
   const leadActor = getLeadActor(movie);
@@ -280,48 +289,25 @@ function parseStoredResult(result) {
     date: result.date,
     mood: result.mood,
     moodLabel: CATEGORIES[result.mood]?.label || result.mood,
-    scores: JSON.parse(result.scores),
-    answers: JSON.parse(result.answers),
-    recommendations: JSON.parse(result.recommendations),
+    scores: parseMaybeJson(result.scores),
+    answers: parseMaybeJson(result.answers),
+    recommendations: parseMaybeJson(result.recommendations),
     createdAt: result.createdAt,
   };
 }
 
 async function findDailyTasteResult(userId, date) {
-  const rows = await prisma.$queryRaw`
-    SELECT id, "userId", date, mood, scores, answers, recommendations, "createdAt"
-    FROM "DailyTasteResult"
-    WHERE "userId" = ${userId} AND date = ${date}
-    LIMIT 1
-  `;
-  return rows[0] || null;
+  return prisma.dailyTasteResult.findUnique({
+    where: { userId_date: { userId, date } },
+  });
 }
 
 async function saveDailyTasteResult({ userId, date, mood, scores, answers, recommendations }) {
-  const scoresJson = JSON.stringify(scores);
-  const answersJson = JSON.stringify(answers);
-  const recommendationsJson = JSON.stringify(recommendations);
-
-  await prisma.$executeRaw`
-    INSERT INTO "DailyTasteResult" ("id", "userId", date, mood, scores, answers, recommendations)
-    VALUES (
-      ${randomUUID()},
-      ${userId},
-      ${date},
-      ${mood},
-      ${scoresJson},
-      ${answersJson},
-      ${recommendationsJson}
-    )
-    ON CONFLICT ("userId", date)
-    DO UPDATE SET
-      mood = EXCLUDED.mood,
-      scores = EXCLUDED.scores,
-      answers = EXCLUDED.answers,
-      recommendations = EXCLUDED.recommendations
-  `;
-
-  return findDailyTasteResult(userId, date);
+  return prisma.dailyTasteResult.upsert({
+    where: { userId_date: { userId, date } },
+    update: { mood, scores, answers, recommendations },
+    create: { id: randomUUID(), userId, date, mood, scores, answers, recommendations },
+  });
 }
 
 function calculateScores(answers) {

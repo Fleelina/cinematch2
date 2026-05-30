@@ -44,6 +44,7 @@ const getConversations = async (userId) => {
           movie: { select: MOVIE_SELECT },
           createdAt: true,
           readAt: true,
+          deletedForAll: true,
         },
       },
     },
@@ -182,7 +183,7 @@ const sendMessage = async (matchId, userId, text, movieId = null) => {
 const deleteMessage = async (messageId, userId, scope) => {
   const message = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { id: true, senderId: true, matchId: true, deletedFor: true },
+    select: { id: true, senderId: true, matchId: true, type: true, deletedFor: true },
   });
 
   if (!message) throw new ApiError(404, 'Mesaj bulunamadi');
@@ -195,6 +196,7 @@ const deleteMessage = async (messageId, userId, scope) => {
 
   if (scope === 'all') {
     // Sadece kendi mesajini herkesten silebilir
+    if (message.type !== 'USER') throw new ApiError(403, 'Sistem mesajlari herkesten silinemez');
     if (message.senderId !== userId) throw new ApiError(403, 'Sadece kendi mesajinizi herkesten silebilirsiniz');
     await prisma.message.update({
       where: { id: messageId },

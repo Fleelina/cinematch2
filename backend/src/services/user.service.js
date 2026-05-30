@@ -1,8 +1,31 @@
 const prisma = require('../prisma');
+const { InteractionType } = require('@prisma/client');
 const { ApiError } = require('../middleware/errorHandler');
 const { deleteFromR2 } = require('./upload.service');
+const { calculateAge, normalizeGender } = require('../utils/user.utils');
 
 const DISLIKE_COOLDOWN_HOURS = 24;
+
+const applyAgeDisplay = (user) => {
+  if (!user) return user;
+  const { birthDate, ...publicUser } = user;
+  const computedAge = calculateAge(user.birthDate);
+  return { ...publicUser, age: user.showAge ? computedAge : null };
+};
+
+const parseJsonArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
 
 // Profil ekraninin ihtiyac duydugu kullanici + film iliskilerini yukler.
 const getProfile = (userId) =>
@@ -39,12 +62,14 @@ const stripPassword = ({ password, ...user }) => user;
 const discoverUsers = async (userId) => {
   const cooldownDate = new Date(Date.now() - DISLIKE_COOLDOWN_HOURS * 60 * 60 * 1000);
 
-  const [likes, recentDislikes, blockedUsers, myMovies] = await Promise.all([
-    prisma.interaction.findMany({ where: { fromUserId: userId, type: { in: ['LIKE', 'MATCHED'] } }, select: { toUserId: true } }),
-    prisma.interaction.findMany({ where: { fromUserId: userId, type: 'DISLIKE', createdAt: { gte: cooldownDate } }, select: { toUserId: true } }),
-    prisma.interaction.findMany({ where: { fromUserId: userId, type: 'BLOCK' }, select: { toUserId: true } }),
+  const [likes, recentDislikes, blockedUsers, myMovies, matches] = await Promise.all([
+    prisma.interaction.findMany({ where: { fromUserId: userId, type: InteractionType.LIKE }, select: { toUserId: true } }),
+    prisma.interaction.findMany({ where: { fromUserId: userId, type: InteractionType.DISLIKE, createdAt: { gte: cooldownDate } }, select: { toUserId: true } }),
+    prisma.interaction.findMany({ where: { fromUserId: userId, type: InteractionType.BLOCK }, select: { toUserId: true } }),
     prisma.userMovie.findMany({ where: { userId }, select: { movieId: true } }),
+    prisma.match.findMany({ where: { OR: [{ user1Id: userId }, { user2Id: userId }] }, select: { user1Id: true, user2Id: true } }),
   ]);
+  const matchedUserIds = matches.map((match) => match.user1Id === userId ? match.user2Id : match.user1Id);
 
   const excludedIds = [
     ...new Set([
@@ -52,6 +77,7 @@ const discoverUsers = async (userId) => {
       ...likes.map((i) => i.toUserId),
       ...recentDislikes.map((i) => i.toUserId),
       ...blockedUsers.map((i) => i.toUserId),
+      ...matchedUserIds,
     ]),
   ];
   const myMovieIds = myMovies.map((m) => m.movieId);
@@ -61,7 +87,7 @@ const discoverUsers = async (userId) => {
     where: { id: { notIn: excludedIds } },
     select: {
       id: true, name: true, username: true, bio: true,
-      avatar: true, avatarType: true, profilePhotos: true, age: true, showAge: true,
+      avatar: true, avatarType: true, profilePhotos: true, birthDate: true, showAge: true,
       movies: {
         select: { movieId: true, movie: { select: { id: true, title: true, poster: true, tmdbId: true } } },
         take: 20,
@@ -74,8 +100,7 @@ const discoverUsers = async (userId) => {
       const theirMovieIds = user.movies.map((m) => m.movieId);
       const commonCount = theirMovieIds.filter((id) => myMovieIdSet.has(id)).length;
       const score = myMovieIds.length > 0 ? (commonCount / myMovieIds.length) * 100 : 0;
-      if (!user.showAge) user.age = null;
-      return { ...user, matchScore: Math.round(score), commonMovies: commonCount };
+      return { ...applyAgeDisplay(user), matchScore: Math.round(score), commonMovies: commonCount };
     })
     .sort((a, b) => b.matchScore - a.matchScore);
 };
@@ -133,11 +158,7 @@ const getProfileStats = async (userId) => {
   // Tür dağılımı
   const genreCounts = {};
   for (const { movie } of allMovies) {
-    if (!movie.genres) continue;
-    try {
-      const parsed = JSON.parse(movie.genres);
-      for (const g of parsed) genreCounts[g] = (genreCounts[g] || 0) + 1;
-    } catch {}
+    for (const g of parseJsonArray(movie.genres)) genreCounts[g] = (genreCounts[g] || 0) + 1;
   }
   const topGenres = Object.entries(genreCounts)
     .sort((a, b) => b[1] - a[1])
@@ -159,11 +180,7 @@ const getProfileStats = async (userId) => {
   // En fazla filmi izlenen oyuncu
   const actorCounts = {};
   for (const { movie } of allMovies) {
-    if (!movie.cast) continue;
-    try {
-      const parsed = JSON.parse(movie.cast);
-      for (const actor of parsed) actorCounts[actor] = (actorCounts[actor] || 0) + 1;
-    } catch {}
+    for (const actor of parseJsonArray(movie.cast)) actorCounts[actor] = (actorCounts[actor] || 0) + 1;
   }
   const topActor = Object.entries(actorCounts).sort((a, b) => b[1] - a[1])[0] || null;
 
@@ -184,7 +201,7 @@ const getProfileStats = async (userId) => {
 
 const getBlockedUsers = async (userId) => {
   const blocked = await prisma.interaction.findMany({
-    where: { fromUserId: userId, type: 'BLOCK' },
+    where: { fromUserId: userId, type: InteractionType.BLOCK },
     orderBy: { createdAt: 'desc' },
     select: {
       createdAt: true,
@@ -197,7 +214,7 @@ const getBlockedUsers = async (userId) => {
           avatarType: true,
           profilePhotos: true,
           bio: true,
-          age: true,
+          birthDate: true,
           showAge: true,
         },
       },
@@ -205,8 +222,7 @@ const getBlockedUsers = async (userId) => {
   });
 
   return blocked.map(({ createdAt, toUser }) => ({
-    ...toUser,
-    age: toUser?.showAge ? toUser.age : null,
+    ...applyAgeDisplay(toUser),
     blockedAt: createdAt,
   }));
 };
@@ -216,11 +232,10 @@ const getBlockedUsers = async (userId) => {
 const getPublicProfile = async (userId) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, username: true, bio: true, avatar: true, avatarType: true, profilePhotos: true, age: true, showAge: true, createdAt: true },
+    select: { id: true, name: true, username: true, bio: true, avatar: true, avatarType: true, profilePhotos: true, birthDate: true, showAge: true, createdAt: true },
   });
   if (!user) return null;
-  if (!user.showAge) user.age = null;
-  return user;
+  return applyAgeDisplay(user);
 };
 
 // Public profil istatistikleri, private profil ile ayni kurallarla uretilir.
@@ -274,11 +289,7 @@ const getPublicStats = async (userId) => {
 
   const genreCounts = {};
   for (const { movie } of allMovies) {
-    if (!movie.genres) continue;
-    try {
-      const parsed = JSON.parse(movie.genres);
-      for (const g of parsed) genreCounts[g] = (genreCounts[g] || 0) + 1;
-    } catch {}
+    for (const g of parseJsonArray(movie.genres)) genreCounts[g] = (genreCounts[g] || 0) + 1;
   }
   const topGenres = Object.entries(genreCounts)
     .sort((a, b) => b[1] - a[1])
@@ -297,11 +308,7 @@ const getPublicStats = async (userId) => {
 
   const actorCounts = {};
   for (const { movie } of allMovies) {
-    if (!movie.cast) continue;
-    try {
-      const parsed = JSON.parse(movie.cast);
-      for (const actor of parsed) actorCounts[actor] = (actorCounts[actor] || 0) + 1;
-    } catch {}
+    for (const actor of parseJsonArray(movie.cast)) actorCounts[actor] = (actorCounts[actor] || 0) + 1;
   }
   const topActor = Object.entries(actorCounts).sort((a, b) => b[1] - a[1])[0] || null;
   const ratingsByMovieId = new Map(
@@ -335,12 +342,12 @@ const getPublicStats = async (userId) => {
 const fetchProfile = async (userId) => {
   const user = await getProfile(userId);
   if (!user) throw new ApiError(404, 'Kullanici bulunamadi');
-  return stripPassword(user);
+  return stripPassword({ ...user, age: calculateAge(user.birthDate) });
 };
 
 // Profil guncellemesini parcali update mantigiyla yapar.
 // Yeni upload avatar geldiyse eski R2 objesi async olarak temizlenir.
-const updateProfile = async (userId, { name, username, bio, avatar, avatarType, profilePhotos, age, showAge, gender }) => {
+const updateProfile = async (userId, { name, username, bio, avatar, avatarType, profilePhotos, birthDate, showAge, gender }) => {
   if (username) {
     const taken = await isUsernameTaken(username, userId);
     if (taken) throw new ApiError(409, 'Bu kullanici adi zaten alinmis');
@@ -357,6 +364,11 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
     }
   }
 
+  const parsedBirthDate = birthDate !== undefined && birthDate !== null ? new Date(birthDate) : null;
+  const derivedAge = birthDate !== undefined ? calculateAge(parsedBirthDate) : null;
+  if (derivedAge !== null && (derivedAge < 13 || derivedAge > 120)) {
+    throw new ApiError(400, 'Gecersiz dogum tarihi');
+  }
   const updated = await updateUser(userId, {
     ...(name !== undefined && { name }),
     ...(username !== undefined && { username }),
@@ -364,12 +376,12 @@ const updateProfile = async (userId, { name, username, bio, avatar, avatarType, 
     ...(avatar !== undefined && { avatar }),
     ...(avatarType !== undefined && { avatarType }),
     ...(profilePhotos !== undefined && { profilePhotos: profilePhotos.slice(0, 3).filter(Boolean) }),
-    ...(age !== undefined && { age: age ? parseInt(age, 10) : null }),
+    ...(birthDate !== undefined && { birthDate: parsedBirthDate }),
     ...(showAge !== undefined && { showAge }),
-    ...(gender !== undefined && { gender: gender ?? null }),
+    ...(gender !== undefined && { gender: normalizeGender(gender) }),
   });
 
-  return stripPassword(updated);
+  return stripPassword({ ...updated, age: calculateAge(updated.birthDate) });
 };
 
 // Hesap silme — R2'deki avatarlar temizlenir, sonra kullanici DB'den cascade ile kaldirilir.

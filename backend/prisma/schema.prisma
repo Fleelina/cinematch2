@@ -16,11 +16,11 @@ model User {
   password    String
   bio         String?
   avatar      String?
-  avatarType  String?
+  avatarType  AvatarType?
   profilePhotos String[] @default([])
-  age         Int?
+  birthDate   DateTime?
   showAge     Boolean  @default(false)
-  gender      String?  // 'male' | 'female' | null — ileride eslestirme filtresi
+  gender      Gender?
   pushToken   String?  // Expo push notification token
   createdAt   DateTime @default(now())
 
@@ -42,13 +42,14 @@ model Movie {
   poster   String?
   year     Int?
   runtime  Int?
-  genres   String?  // JSON array, e.g. ["Drama","Romance"]
+  genres   Json?
   director String?
-  cast     String?  // JSON array, e.g. ["Actor1","Actor2"]
+  cast     Json?
 
   users    UserMovie[]
   ratings  MovieRating[]
   messages Message[]
+  watchlist Watchlist[]
 }
 
 model UserMovie {
@@ -82,23 +83,46 @@ model MovieRating {
 model Watchlist {
   id      String   @id @default(cuid())
   userId  String
+  movieId String?
   tmdbId  Int
   title   String
   poster  String?
   year    Int?
   addedAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie Movie? @relation(fields: [movieId], references: [id], onDelete: SetNull)
 
   @@unique([userId, tmdbId])
   @@index([userId])
+  @@index([movieId])
+}
+
+enum AvatarType {
+  upload
+  photo
+  character
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum InteractionType {
+  LIKE
+  DISLIKE
+  SUPERLIKE
+  BLOCK
 }
 
 model Interaction {
   id         String   @id @default(cuid())
   fromUserId String
   toUserId   String
-  type       String
+  type       InteractionType
   createdAt  DateTime @default(now())
 
   fromUser User @relation("SentInteractions", fields: [fromUserId], references: [id], onDelete: Cascade)
@@ -158,9 +182,9 @@ model DailyTasteResult {
   userId          String
   date            String
   mood            String
-  scores          String
-  answers         String
-  recommendations String
+  scores          Json
+  answers         Json
+  recommendations Json
   createdAt       DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

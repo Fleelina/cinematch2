@@ -183,7 +183,7 @@ export default function Step5Movies({ navigation }) {
         bio: data.bio || null,
         avatar: data.avatar || null,
         avatarType: data.avatarType || null,
-        age: data.age || null,
+        birthDate: data.birthDate ? new Date(data.birthDate).toISOString() : null,
         showAge: data.showAge || false,
         gender: data.gender || null,
         movies: movieList,
